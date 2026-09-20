@@ -67,9 +67,17 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const fetchUserProfile = async (userId) => {
+    const showAlert = (title, msg) => {
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.alert(title + ': ' + msg);
+      } else {
+        Alert.alert(title, msg);
+      }
+    };
+
     try {
       setLoading(true);
-      Alert.alert('DEBUG 1', 'Fetching profile for userId: ' + userId);
+      showAlert('DEBUG 1', 'Fetching profile for userId: ' + userId);
       
       const { data, error } = await supabase
         .from('users')
@@ -77,14 +85,14 @@ export const AuthProvider = ({ children }) => {
         .eq('id', userId)
         .single();
       
-      Alert.alert('DEBUG 2', 'Query result => data: ' + JSON.stringify(data) + ' | error: ' + JSON.stringify(error));
+      showAlert('DEBUG 2', 'data: ' + JSON.stringify(data) + ' | error: ' + JSON.stringify(error));
         
       if (error) {
         throw error;
       }
       if (data) {
         const normalizedRole = (data.role || 'student').trim().toLowerCase();
-        Alert.alert('DEBUG 3', 'DB role: "' + data.role + '" => normalized: "' + normalizedRole + '"');
+        showAlert('DEBUG 3', 'DB role: "' + data.role + '" => normalized: "' + normalizedRole + '"');
         setRole(normalizedRole);
         setIsBanned(data.is_banned || false);
         if (data.profile_picture_url) {
@@ -95,13 +103,13 @@ export const AuthProvider = ({ children }) => {
       } else {
         const { data: { session } } = await supabase.auth.getSession();
         const sessionRole = session?.user?.user_metadata?.role || 'student';
-        Alert.alert('DEBUG 4', 'No DB row found. Falling back to session metadata role: "' + sessionRole + '"');
+        showAlert('DEBUG 4', 'No DB row. Fallback role: "' + sessionRole + '"');
         setRole(sessionRole.trim().toLowerCase());
       }
     } catch (error) {
       const { data: { session } } = await supabase.auth.getSession();
       const sessionRole = session?.user?.user_metadata?.role || 'student';
-      Alert.alert('DEBUG 5', 'CATCH block hit. Error: ' + error.message + ' | Fallback role: "' + sessionRole + '"');
+      showAlert('DEBUG 5', 'Error: ' + error.message + ' | Fallback role: "' + sessionRole + '"');
       setRole(sessionRole.trim().toLowerCase());
     } finally {
       setLoading(false);
