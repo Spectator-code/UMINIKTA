@@ -4,7 +4,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { syncOfflineQueue } from '../src/utils/offlineQueue';
 import { SecurityWAF } from '../src/utils/SecurityWAF';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Platform } from 'react-native';
 
 function RootLayoutNav() {
   const { user, role, isBanned, loading } = useAuth();

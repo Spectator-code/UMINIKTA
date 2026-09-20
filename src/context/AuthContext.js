@@ -80,14 +80,7 @@ export const AuthProvider = ({ children }) => {
         throw error;
       }
       if (data) {
-        let normalizedRole = (data.role || 'student').trim().toLowerCase();
-        
-        // 007 Hardening: Absolute Override for Root Admin
-        const { data: { session: currentSession } } = await supabase.auth.getSession();
-        if (currentSession?.user?.email === 'alkcabanatan@gmail.com') {
-          normalizedRole = 'secops';
-        }
-        
+        const normalizedRole = (data.role || 'student').trim().toLowerCase();
         setRole(normalizedRole);
         setIsBanned(data.is_banned || false);
         if (data.profile_picture_url) {
@@ -103,7 +96,6 @@ export const AuthProvider = ({ children }) => {
       }
     } catch (error) {
       console.warn('Failed to fetch user profile, using fallback:', error.message);
-      Alert.alert('Debug Auth', 'Failed to fetch DB role: ' + error.message);
       const { data: { session } } = await supabase.auth.getSession();
       const sessionRole = session?.user?.user_metadata?.role || 'student';
       setRole(sessionRole.trim().toLowerCase());
