@@ -262,7 +262,6 @@ export default function StudentDashboard() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StudentNavbar currentTab="classes" />
-
       <ScrollView
         style={styles.scrollContainer}
         contentContainerStyle={styles.scrollContent}
