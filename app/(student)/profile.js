@@ -469,7 +469,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
-    flexWrap: 'wrap',
+    flex: 1,
   },
   avatarContainer: {
     position: 'relative',
@@ -519,6 +519,7 @@ const styles = StyleSheet.create({
   },
   profileDetailsCol: {
     justifyContent: 'center',
+    flex: 1,
   },
   titleWithBadge: {
     flexDirection: 'row',

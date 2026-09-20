@@ -82,7 +82,10 @@ export const AuthProvider = ({ children }) => {
       if (data) {
         setRole(data.role);
         setIsBanned(data.is_banned || false);
-        if (data.profile_picture_url) setProfilePicture(data.profile_picture_url);
+        if (data.profile_picture_url) {
+          setProfilePicture(data.profile_picture_url);
+          setItemAsync(PROFILE_PICTURE_KEY, data.profile_picture_url).catch(console.warn);
+        }
         if (data.cover_photo_url) setCoverPhoto(data.cover_photo_url);
       } else {
         // Fallback: If no DB profile exists, grab role from active session metadata
@@ -101,7 +104,7 @@ export const AuthProvider = ({ children }) => {
   const loadLocalData = async () => {
     try {
       const savedPic = await getItemAsync(PROFILE_PICTURE_KEY);
-      if (savedPic) setProfilePicture(savedPic);
+      if (savedPic) setProfilePicture(prev => prev || savedPic);
 
       const savedNotifs = await getItemAsync(NOTIFICATIONS_KEY);
       if (savedNotifs) setNotifications(JSON.parse(savedNotifs));
