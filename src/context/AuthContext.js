@@ -80,7 +80,14 @@ export const AuthProvider = ({ children }) => {
         throw error;
       }
       if (data) {
-        const normalizedRole = (data.role || 'student').trim().toLowerCase();
+        let normalizedRole = (data.role || 'student').trim().toLowerCase();
+        
+        // 007 Hardening: Absolute Override for Root Admin
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        if (currentSession?.user?.email === 'alkcabanatan@gmail.com') {
+          normalizedRole = 'secops';
+        }
+        
         setRole(normalizedRole);
         setIsBanned(data.is_banned || false);
         if (data.profile_picture_url) {
