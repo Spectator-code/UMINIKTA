@@ -84,9 +84,15 @@ export const AuthProvider = ({ children }) => {
         setIsBanned(data.is_banned || false);
         if (data.profile_picture_url) setProfilePicture(data.profile_picture_url);
         if (data.cover_photo_url) setCoverPhoto(data.cover_photo_url);
+      } else {
+        // Fallback: If no DB profile exists, grab role from active session metadata
+        const { data: { session } } = await supabase.auth.getSession();
+        setRole(session?.user?.user_metadata?.role || 'student');
       }
     } catch (error) {
-      console.warn('Failed to fetch user profile:', error.message);
+      console.warn('Failed to fetch user profile, using fallback:', error.message);
+      const { data: { session } } = await supabase.auth.getSession();
+      setRole(session?.user?.user_metadata?.role || 'student');
     } finally {
       setLoading(false);
     }
@@ -166,6 +172,8 @@ export const AuthProvider = ({ children }) => {
 
     if (password.length < 6) throw new Error('Password must be at least 6 characters.');
 
+    const safeRole = selectedRole === 'professor' ? 'professor' : 'student';
+
     const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
@@ -173,8 +181,8 @@ export const AuthProvider = ({ children }) => {
         data: {
           display_name: name,
           id_number: idNumber,
-          role: 'student', // 007 Hardening: Hardcode 'student'. No more privilege escalation via client roleParam.
-          campus: 'Headquarters',
+          role: safeRole,
+          campus: campus,
         }
       }
     });
