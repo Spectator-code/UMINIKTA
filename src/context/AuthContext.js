@@ -96,6 +96,7 @@ export const AuthProvider = ({ children }) => {
       }
     } catch (error) {
       console.warn('Failed to fetch user profile, using fallback:', error.message);
+      Alert.alert('Debug Auth', 'Failed to fetch DB role: ' + error.message);
       const { data: { session } } = await supabase.auth.getSession();
       const sessionRole = session?.user?.user_metadata?.role || 'student';
       setRole(sessionRole.trim().toLowerCase());
