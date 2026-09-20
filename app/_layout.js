@@ -53,14 +53,14 @@ function RootLayoutNav() {
       if (!isBanned) {
         if (inAuthGroup) {
           if (role === 'secops') {
-            router.replace('/(secops)');
+            setTimeout(() => router.replace('/(secops)'), 100);
           } else if (role === 'professor') {
-            router.replace('/(professor)');
+            setTimeout(() => router.replace('/(professor)'), 100);
           } else if (role === 'student') {
-            router.replace('/(student)');
+            setTimeout(() => router.replace('/(student)'), 100);
           }
         } else if (role && segments[0] !== `(${role})`) {
-           router.replace(`/(${role})`);
+           setTimeout(() => router.replace(`/(${role})`), 100);
         }
       }
     }
