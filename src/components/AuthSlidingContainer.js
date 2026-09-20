@@ -28,6 +28,7 @@ export default function AuthSlidingContainer({ initialSignUp = false }) {
   const [showSignInPassword, setShowSignInPassword] = useState(false);
 
   // Sign Up form state
+  const [signUpRole, setSignUpRole] = useState('student');
   const [signUpCampus, setSignUpCampus] = useState('Matina Campus');
   const [signUpName, setSignUpName] = useState('');
   const [signUpIdNumber, setSignUpIdNumber] = useState('');
@@ -154,7 +155,7 @@ export default function AuthSlidingContainer({ initialSignUp = false }) {
         idNumber: signUpIdNumber.trim(),
         email: signUpEmail.trim(),
         password: signUpPassword,
-        role: 'student',
+        role: signUpRole,
         campus: signUpCampus,
       });
     } catch (e) {
@@ -326,6 +327,46 @@ export default function AuthSlidingContainer({ initialSignUp = false }) {
                   <Text style={styles.subtitle}>
                     Create your academic account to get started.
                   </Text>
+                </View>
+
+                {/* Role Selector Desktop */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Account Type</Text>
+                  <View style={styles.roleSelectorRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.roleButton,
+                        signUpRole === 'student' && styles.roleButtonActive,
+                      ]}
+                      onPress={() => setSignUpRole('student')}
+                    >
+                      <Text
+                        style={[
+                          styles.roleButtonText,
+                          signUpRole === 'student' && styles.roleButtonTextActive,
+                        ]}
+                      >
+                        Student
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.roleButton,
+                        signUpRole === 'professor' && styles.roleButtonActive,
+                      ]}
+                      onPress={() => setSignUpRole('professor')}
+                    >
+                      <Text
+                        style={[
+                          styles.roleButtonText,
+                          signUpRole === 'professor' && styles.roleButtonTextActive,
+                        ]}
+                      >
+                        Professor
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
                 {/* Campus Selector */}
@@ -693,6 +734,40 @@ export default function AuthSlidingContainer({ initialSignUp = false }) {
                         Professor
                       </Text>
                     </TouchableOpacity>
+                  </View>
+
+                  {/* Campus Selector Mobile */}
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Campus</Text>
+                    <View style={[styles.roleSelectorRow, { marginBottom: 0 }]}>
+                      {['Matina Campus', 'Visayan Campus', 'Arellano Campus'].map((campusOption) => {
+                        const displayNames = {
+                          'Matina Campus': 'Matina',
+                          'Visayan Campus': 'Visayan',
+                          'Arellano Campus': 'Arellano'
+                        };
+                        return (
+                          <TouchableOpacity
+                            key={campusOption}
+                            style={[
+                              styles.roleButton,
+                              signUpCampus === campusOption && styles.roleButtonActive,
+                            ]}
+                            onPress={() => setSignUpCampus(campusOption)}
+                          >
+                            <Text
+                              style={[
+                                styles.roleButtonText,
+                                signUpCampus === campusOption && styles.roleButtonTextActive,
+                                { fontSize: 13 }
+                              ]}
+                            >
+                              {displayNames[campusOption]}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
                   </View>
 
                   {/* Full Name Field */}
