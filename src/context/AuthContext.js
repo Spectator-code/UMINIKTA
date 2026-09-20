@@ -80,7 +80,8 @@ export const AuthProvider = ({ children }) => {
         throw error;
       }
       if (data) {
-        setRole(data.role);
+        const normalizedRole = (data.role || 'student').trim().toLowerCase();
+        setRole(normalizedRole);
         setIsBanned(data.is_banned || false);
         if (data.profile_picture_url) {
           setProfilePicture(data.profile_picture_url);
@@ -90,12 +91,14 @@ export const AuthProvider = ({ children }) => {
       } else {
         // Fallback: If no DB profile exists, grab role from active session metadata
         const { data: { session } } = await supabase.auth.getSession();
-        setRole(session?.user?.user_metadata?.role || 'student');
+        const sessionRole = session?.user?.user_metadata?.role || 'student';
+        setRole(sessionRole.trim().toLowerCase());
       }
     } catch (error) {
       console.warn('Failed to fetch user profile, using fallback:', error.message);
       const { data: { session } } = await supabase.auth.getSession();
-      setRole(session?.user?.user_metadata?.role || 'student');
+      const sessionRole = session?.user?.user_metadata?.role || 'student';
+      setRole(sessionRole.trim().toLowerCase());
     } finally {
       setLoading(false);
     }
