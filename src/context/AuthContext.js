@@ -69,18 +69,22 @@ export const AuthProvider = ({ children }) => {
   const fetchUserProfile = async (userId) => {
     try {
       setLoading(true);
+      Alert.alert('DEBUG 1', 'Fetching profile for userId: ' + userId);
+      
       const { data, error } = await supabase
         .from('users')
         .select('role, is_banned, profile_picture_url, cover_photo_url')
         .eq('id', userId)
         .single();
+      
+      Alert.alert('DEBUG 2', 'Query result => data: ' + JSON.stringify(data) + ' | error: ' + JSON.stringify(error));
         
       if (error) {
-        Alert.alert('Profile Error', 'Could not fetch your role: ' + error.message);
         throw error;
       }
       if (data) {
         const normalizedRole = (data.role || 'student').trim().toLowerCase();
+        Alert.alert('DEBUG 3', 'DB role: "' + data.role + '" => normalized: "' + normalizedRole + '"');
         setRole(normalizedRole);
         setIsBanned(data.is_banned || false);
         if (data.profile_picture_url) {
@@ -89,15 +93,15 @@ export const AuthProvider = ({ children }) => {
         }
         if (data.cover_photo_url) setCoverPhoto(data.cover_photo_url);
       } else {
-        // Fallback: If no DB profile exists, grab role from active session metadata
         const { data: { session } } = await supabase.auth.getSession();
         const sessionRole = session?.user?.user_metadata?.role || 'student';
+        Alert.alert('DEBUG 4', 'No DB row found. Falling back to session metadata role: "' + sessionRole + '"');
         setRole(sessionRole.trim().toLowerCase());
       }
     } catch (error) {
-      console.warn('Failed to fetch user profile, using fallback:', error.message);
       const { data: { session } } = await supabase.auth.getSession();
       const sessionRole = session?.user?.user_metadata?.role || 'student';
+      Alert.alert('DEBUG 5', 'CATCH block hit. Error: ' + error.message + ' | Fallback role: "' + sessionRole + '"');
       setRole(sessionRole.trim().toLowerCase());
     } finally {
       setLoading(false);
