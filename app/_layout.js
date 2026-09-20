@@ -24,6 +24,22 @@ function RootLayoutNav() {
   useEffect(() => {
     if (loading) return;
 
+    // 007 Hardening: Clear sensitive Supabase tokens from the URL bar to prevent leakage
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      if (window.location.hash.includes('error=')) {
+        const urlParams = new URLSearchParams(window.location.hash.replace('#', '?'));
+        const errorDesc = urlParams.get('error_description');
+        if (errorDesc) alert('Authentication Error: ' + errorDesc.replace(/\+/g, ' '));
+      }
+      
+      if (window.location.hash.includes('access_token=') || window.location.hash.includes('error=')) {
+        // Delay slightly to ensure Supabase Auth has time to parse the tokens
+        setTimeout(() => {
+          window.history.replaceState(null, '', window.location.pathname);
+        }, 500);
+      }
+    }
+
     const inAuthGroup = segments[0] === '(auth)';
 
     if (!user && !inAuthGroup) {
