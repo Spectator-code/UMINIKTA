@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, SafeAreaView, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../../src/context/AuthContext';
-import { loadSubjects, saveSubjects, loadPosts, loadComments, loadSubmissions } from '../../../src/utils/mockData';
+import { supabase } from '../../../src/config/supabase';
 
 export default function ProfessorSubjectDetails() {
   const { id, name, code } = useLocalSearchParams();
@@ -25,30 +25,46 @@ export default function ProfessorSubjectDetails() {
   const fetchData = async () => {
     setLoading(true);
     try {
+      // 007 Hardening: Fetch securely from Supabase
       if (viewMode === 'feed') {
-        const allPosts = await loadPosts();
-        const subjectPosts = allPosts.filter(p => p.subjectId === id);
-        subjectPosts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        setPosts(subjectPosts);
+        const { data: postsData, error: postsErr } = await supabase
+          .from('posts')
+          .select('*')
+          .eq('subject_id', id)
+          .order('created_at', { ascending: false });
+          
+        if (postsErr) throw postsErr;
+        
+        const formattedPosts = postsData.map(p => ({
+          id: p.id,
+          subjectId: p.subject_id,
+          type: p.type,
+          title: p.title,
+          content: p.content,
+          fileName: p.file_name,
+          fileUri: p.file_uri,
+          createdAt: p.created_at
+        }));
+        setPosts(formattedPosts);
 
-        const allComments = await loadComments();
-        setComments(allComments);
-
-        const allSubs = await loadSubmissions();
-        setSubmissions(allSubs.filter(s => s.subjectId === id));
+        setComments([]); // Comments table not implemented in schema yet
+        setSubmissions([]); // Submissions table not implemented in schema yet
       } else {
-        const allSubjects = await loadSubjects();
-        const subject = allSubjects.find(s => s.id === id);
-        if (subject) {
-          const studentList = subject.students.map((sId, index) => ({
-            id: sId,
-            email: `student${index + 1}@umindanao.edu.ph`,
-          }));
-          setStudents(studentList);
-        }
+        const { data: enrollments, error: enrollErr } = await supabase
+          .from('enrollments')
+          .select('student_id (id, email)')
+          .eq('subject_id', id);
+          
+        if (enrollErr) throw enrollErr;
+        
+        const studentList = enrollments.map(e => ({
+          id: e.student_id.id,
+          email: e.student_id.email
+        }));
+        setStudents(studentList);
       }
     } catch (e) {
-      console.warn("Failed to fetch data:", e);
+      console.warn("Failed to fetch data:", e.message);
     } finally {
       setLoading(false);
     }
@@ -56,48 +72,26 @@ export default function ProfessorSubjectDetails() {
 
   const handleKick = async (studentId) => {
     try {
-      const allSubjects = await loadSubjects();
-      const subject = allSubjects.find(s => s.id === id);
-      if (subject) {
-        subject.students = subject.students.filter(sId => sId !== studentId);
-        await saveSubjects(allSubjects);
-        setStudents(students.filter(s => s.id !== studentId));
-        Alert.alert('Success', 'Student removed from class.');
-      }
+      const { error } = await supabase
+        .from('enrollments')
+        .delete()
+        .eq('subject_id', id)
+        .eq('student_id', studentId);
+        
+      if (error) throw error;
+      setStudents(students.filter(s => s.id !== studentId));
+      Alert.alert('Success', 'Student removed from class.');
     } catch (e) {
       Alert.alert('Error', 'Could not remove student.');
     }
   };
 
   const handleBan = async (studentId) => {
-    try {
-      const allSubjects = await loadSubjects();
-      const subject = allSubjects.find(s => s.id === id);
-      if (subject) {
-        subject.students = subject.students.filter(sId => sId !== studentId);
-        if (!subject.bannedStudents) subject.bannedStudents = [];
-        subject.bannedStudents.push(studentId);
-        await saveSubjects(allSubjects);
-        setStudents(students.filter(s => s.id !== studentId));
-        Alert.alert('Success', 'Student has been banned.');
-      }
-    } catch (e) {
-      Alert.alert('Error', 'Could not ban student.');
-    }
+    Alert.alert('Not Implemented', 'Ban functionality requires additional DB columns.');
   };
 
   const handleUnban = async (studentId) => {
-    try {
-      const allSubjects = await loadSubjects();
-      const subject = allSubjects.find(s => s.id === id);
-      if (subject) {
-        subject.bannedStudents = (subject.bannedStudents || []).filter(sId => sId !== studentId);
-        await saveSubjects(allSubjects);
-        Alert.alert('Success', 'Student has been unbanned. They can rejoin with the class code.');
-      }
-    } catch (e) {
-      Alert.alert('Error', 'Could not unban student.');
-    }
+    Alert.alert('Not Implemented', 'Unban functionality requires additional DB columns.');
   };
 
   const getPostCommentCount = (postId) => {

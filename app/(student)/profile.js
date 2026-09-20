@@ -10,10 +10,11 @@ import {
   Alert,
   Modal,
   Dimensions,
+  Platform,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useAuth } from '../../src/context/AuthContext';
-import { loadSubjects, loadSubmissions, resetAllMockData } from '../../src/utils/mockData';
+import { supabase } from '../../src/config/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import StudentNavbar from '../../src/components/StudentNavbar';
 import UIcon from '../../src/components/UIcon';
@@ -23,7 +24,9 @@ export default function StudentProfile() {
     user,
     logout,
     profilePicture,
+    coverPhoto,
     updateProfilePicture,
+    updateCoverPhoto,
     notifications,
     markNotificationRead,
     markAllNotificationsRead,
@@ -58,13 +61,17 @@ export default function StudentProfile() {
   const fetchStats = async () => {
     setLoading(true);
     try {
-      const allSubjects = await loadSubjects();
-      const enrolled = allSubjects.filter(s => s.students && s.students.includes(user.uid));
-      const allSubmissions = await loadSubmissions();
-      const mySubmissions = allSubmissions.filter(s => s.studentId === user.uid);
-      setStats({ classes: enrolled.length, submissions: mySubmissions.length });
+      // 007 Hardening: Secure query replacing mockData
+      const { data: enrollments, error: enrollErr } = await supabase
+        .from('enrollments')
+        .select('subject_id')
+        .eq('student_id', user.id);
+      
+      if (enrollErr) throw enrollErr;
+
+      setStats({ classes: enrollments.length, submissions: 0 }); // Submissions not implemented in schema yet
     } catch (e) {
-      console.warn('Failed to fetch stats:', e);
+      console.warn('Failed to fetch stats:', e.message);
     } finally {
       setLoading(false);
     }
@@ -108,12 +115,50 @@ export default function StudentProfile() {
   };
 
   const handleChangePhoto = () => {
+    if (Platform.OS === 'web') {
+      handlePickImage();
+      return;
+    }
     Alert.alert(
       'Change Profile Picture',
       'Select an option:',
       [
         { text: 'Choose from Gallery', onPress: handlePickImage },
         { text: 'Take Photo', onPress: handleTakePhoto },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
+  const handlePickCoverImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Needed', 'Please allow access to your photo library to set a cover photo.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [21, 9],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      await updateCoverPhoto(result.assets[0].uri);
+    }
+  };
+
+  const handleChangeCoverPhoto = () => {
+    if (Platform.OS === 'web') {
+      handlePickCoverImage();
+      return;
+    }
+    Alert.alert(
+      'Change Cover Photo',
+      'Select an option:',
+      [
+        { text: 'Choose from Gallery', onPress: handlePickCoverImage },
         { text: 'Cancel', style: 'cancel' },
       ]
     );
@@ -137,24 +182,7 @@ export default function StudentProfile() {
     );
   };
 
-  const handleResetData = async () => {
-    Alert.alert(
-      'Reset Demo Data',
-      'This will reset all mock classes, posts, and submissions back to starter defaults.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset',
-          style: 'destructive',
-          onPress: async () => {
-            await resetAllMockData();
-            await fetchStats();
-            Alert.alert('Data Reset', 'All starter classes and posts have been refreshed.');
-          },
-        },
-      ]
-    );
-  };
+  // 007 Hardening: Removed insecure handleResetData mechanism
 
   const getInitial = () => {
     if (user?.displayName) return user.displayName.charAt(0).toUpperCase();
@@ -174,8 +202,12 @@ export default function StudentProfile() {
         <View style={styles.contentWrapper}>
           {/* ================= ACADEMIC IDENTITY CARD ================= */}
           <View style={styles.profileHeroCard}>
-            {/* Top Green Accent Ribbon */}
-            <View style={styles.heroAccentRibbon} />
+            {/* Top Green Accent Ribbon or Cover Photo */}
+            {coverPhoto ? (
+              <Image source={{ uri: coverPhoto }} style={styles.heroAccentRibbon} />
+            ) : (
+              <View style={styles.heroAccentRibbon} />
+            )}
 
             <View style={styles.heroInnerContent}>
               <View style={styles.avatarSection}>
@@ -201,9 +233,6 @@ export default function StudentProfile() {
                     <Text style={styles.studentFullName}>
                       {user?.displayName || 'Student User'}
                     </Text>
-                    <View style={styles.verifiedBadge}>
-                      <Text style={styles.verifiedBadgeText}>ENROLLED</Text>
-                    </View>
                   </View>
 
                   <Text style={styles.studentEmailText}>
@@ -213,11 +242,11 @@ export default function StudentProfile() {
                   <View style={styles.badgeRow}>
                     <View style={styles.idPill}>
                       <Text style={styles.idLabel}>ID:</Text>
-                      <Text style={styles.idValue}>{user?.idNumber || '2024-00123'}</Text>
+                      <Text style={styles.idValue}>{user?.idNumber || 'Not Set'}</Text>
                     </View>
 
                     <View style={styles.campusPill}>
-                      <Text style={styles.campusText}>UM Matina Campus</Text>
+                      <Text style={styles.campusText}>{user?.campus || 'UM Matina Campus'}</Text>
                     </View>
                   </View>
                 </View>
@@ -225,10 +254,10 @@ export default function StudentProfile() {
 
               <TouchableOpacity
                 style={styles.changePhotoBtn}
-                onPress={handleChangePhoto}
+                onPress={handleChangeCoverPhoto}
                 activeOpacity={0.8}
               >
-                <Text style={styles.changePhotoBtnText}>Update Photo</Text>
+                <Text style={styles.changePhotoBtnText}>Update Cover Photo</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -237,37 +266,30 @@ export default function StudentProfile() {
           <View style={styles.sectionContainer}>
             <Text style={styles.sectionHeading}>Academic Activity</Text>
 
-            <View style={[styles.statsGrid, isDesktop && styles.statsGridDesktop]}>
-              <View style={styles.statMetricCard}>
-                <View style={[styles.statIconCircle, { backgroundColor: '#ECFDF5' }]}>
-                  <UIcon name="book" size={20} color="#059669" />
-                </View>
-                <View style={styles.statNumberCol}>
-                  <Text style={styles.statValue}>{stats.classes}</Text>
-                  <Text style={styles.statLabel}>Enrolled Classes</Text>
-                  <Text style={styles.statSublabel}>Active course streams</Text>
-                </View>
-              </View>
-
-              <View style={styles.statMetricCard}>
-                <View style={[styles.statIconCircle, { backgroundColor: '#EFF6FF' }]}>
-                  <UIcon name="clipboard" size={20} color="#2563EB" />
-                </View>
-                <View style={styles.statNumberCol}>
-                  <Text style={styles.statValue}>{stats.submissions}</Text>
-                  <Text style={styles.statLabel}>Submitted Tasks</Text>
-                  <Text style={styles.statSublabel}>Completed assignments</Text>
+            <View style={styles.bentoStatsContainer}>
+              <View style={[styles.bentoCard, styles.bentoHeroCard]}>
+                <View style={styles.bentoHeroBgCircle} />
+                <View style={styles.bentoHeroBgCircle2} />
+                <View style={styles.bentoContent}>
+                  <Text style={styles.bentoHeroValue}>{stats.classes}</Text>
+                  <Text style={styles.bentoHeroLabel}>Active Classes</Text>
+                  <Text style={styles.bentoHeroSublabel}>Enrolled course streams</Text>
                 </View>
               </View>
 
-              <View style={styles.statMetricCard}>
-                <View style={[styles.statIconCircle, { backgroundColor: '#FEF3C7' }]}>
-                  <UIcon name="bell" size={20} color="#D97706" />
+              <View style={styles.bentoSideCol}>
+                <View style={[styles.bentoCard, styles.bentoSmallCard1]}>
+                  <View style={styles.bentoContent}>
+                    <Text style={styles.bentoSmallValue}>{stats.submissions}</Text>
+                    <Text style={styles.bentoSmallLabel}>Tasks Done</Text>
+                  </View>
                 </View>
-                <View style={styles.statNumberCol}>
-                  <Text style={styles.statValue}>{notifications.length}</Text>
-                  <Text style={styles.statLabel}>Class Alerts</Text>
-                  <Text style={styles.statSublabel}>{unreadCount} unread notices</Text>
+
+                <View style={[styles.bentoCard, styles.bentoSmallCard2]}>
+                  <View style={styles.bentoContent}>
+                    <Text style={[styles.bentoSmallValue, { color: '#B45309' }]}>{notifications.length}</Text>
+                    <Text style={[styles.bentoSmallLabel, { color: '#D97706' }]}>Class Alerts</Text>
+                  </View>
                 </View>
               </View>
             </View>
@@ -299,21 +321,6 @@ export default function StudentProfile() {
               </TouchableOpacity>
 
               <View style={styles.actionDivider} />
-
-              <TouchableOpacity
-                style={styles.actionRowItem}
-                onPress={handleResetData}
-                activeOpacity={0.7}
-              >
-                <View style={styles.actionLeft}>
-                  <UIcon name="refresh" size={20} color="#2563EB" style={{ marginRight: 14 }} />
-                  <View style={styles.actionTextCol}>
-                    <Text style={styles.actionTitle}>Refresh Mock Data</Text>
-                    <Text style={styles.actionSub}>Reset starter courses and activity threads</Text>
-                  </View>
-                </View>
-                <Text style={styles.actionChevron}>›</Text>
-              </TouchableOpacity>
 
               <View style={styles.actionDivider} />
 
@@ -445,8 +452,9 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   heroAccentRibbon: {
-    height: 60,
+    height: 120, // Increased height for better cover photo aspect
     backgroundColor: '#059669',
+    width: '100%',
   },
   heroInnerContent: {
     padding: 24,
@@ -599,52 +607,103 @@ const styles = StyleSheet.create({
     color: '#111827',
     marginBottom: 12,
   },
-  statsGrid: {
-    flexDirection: 'column',
-    gap: 12,
-  },
-  statsGridDesktop: {
+  bentoStatsContainer: {
     flexDirection: 'row',
-  },
-  statMetricCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
     gap: 16,
+    flexWrap: 'wrap',
   },
-  statIconCircle: {
-    width: 50,
-    height: 50,
-    borderRadius: 14,
+  bentoCard: {
+    borderRadius: 24,
+    padding: 24,
+    overflow: 'hidden',
+    position: 'relative',
+    justifyContent: 'flex-end',
+  },
+  bentoHeroCard: {
+    flex: 2,
+    minWidth: '55%',
+    minHeight: 180,
+    backgroundColor: '#059669',
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  bentoHeroBgCircle: {
+    position: 'absolute',
+    top: -40,
+    right: -40,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: '#10B981',
+    opacity: 0.4,
+  },
+  bentoHeroBgCircle2: {
+    position: 'absolute',
+    bottom: -60,
+    left: -30,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: '#047857',
+    opacity: 0.6,
+  },
+  bentoSideCol: {
+    flex: 1,
+    minWidth: '35%',
+    gap: 16,
+    flexDirection: 'column',
+  },
+  bentoSmallCard1: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    minHeight: 80,
     justifyContent: 'center',
-    alignItems: 'center',
+    padding: 16,
   },
-  statIconEmoji: {
-    fontSize: 24,
-  },
-  statNumberCol: {
+  bentoSmallCard2: {
+    flex: 1,
+    backgroundColor: '#FEF3C7',
+    minHeight: 80,
     justifyContent: 'center',
+    padding: 16,
   },
-  statValue: {
-    fontSize: 26,
+  bentoContent: {
+    zIndex: 1,
+  },
+  bentoHeroValue: {
+    fontSize: 56,
     fontWeight: '900',
-    color: '#111827',
-    lineHeight: 28,
+    color: '#FFFFFF',
+    lineHeight: 60,
+    letterSpacing: -2,
   },
-  statLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#374151',
+  bentoHeroLabel: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#ECFDF5',
+    marginTop: 4,
+  },
+  bentoHeroSublabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#A7F3D0',
     marginTop: 2,
   },
-  statSublabel: {
-    fontSize: 11,
-    color: '#9CA3AF',
+  bentoSmallValue: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#111827',
+    lineHeight: 32,
+    letterSpacing: -1,
+  },
+  bentoSmallLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#4B5563',
+    marginTop: 2,
   },
   actionsCard: {
     backgroundColor: '#FFFFFF',

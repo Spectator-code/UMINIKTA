@@ -11,10 +11,13 @@ import {
   ScrollView,
   Dimensions,
   ActivityIndicator,
+  Animated,
+  Easing,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../src/context/AuthContext';
-import { loadSubjects, saveSubjects, loadPosts, loadSubmissions } from '../../src/utils/mockData';
+import { supabase } from '../../src/config/supabase';
+import { ActivityLogger } from '../../src/utils/ActivityLogger';
 import StudentNavbar from '../../src/components/StudentNavbar';
 import UIcon from '../../src/components/UIcon';
 
@@ -35,12 +38,79 @@ export default function StudentDashboard() {
   );
 
   useEffect(() => {
+    if (user) {
+      ActivityLogger.logAction(user.id, 'PAGE_VIEW', 'Viewed Student Dashboard');
+    }
+  }, [user]);
+
+  useEffect(() => {
     const onChange = ({ window }) => {
       setScreenWidth(window.width);
     };
     const sub = Dimensions.addEventListener('change', onChange);
     return () => sub?.remove();
   }, []);
+
+  // Bubble Animations
+  const bubble1Anim = useState(new Animated.Value(0))[0];
+  const bubble2Anim = useState(new Animated.Value(0))[0];
+
+  useEffect(() => {
+    const animateBubble1 = () => {
+      Animated.sequence([
+        Animated.timing(bubble1Anim, {
+          toValue: 1,
+          duration: 8000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(bubble1Anim, {
+          toValue: 0,
+          duration: 8000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]).start(() => animateBubble1());
+    };
+    
+    const animateBubble2 = () => {
+      Animated.sequence([
+        Animated.timing(bubble2Anim, {
+          toValue: 1,
+          duration: 10000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(bubble2Anim, {
+          toValue: 0,
+          duration: 10000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]).start(() => animateBubble2());
+    };
+
+    animateBubble1();
+    animateBubble2();
+  }, []);
+
+  const bubble1TranslateY = bubble1Anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -30]
+  });
+  const bubble1Scale = bubble1Anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.15]
+  });
+
+  const bubble2TranslateX = bubble2Anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 40]
+  });
+  const bubble2Scale = bubble2Anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.1]
+  });
 
   const isDesktop = screenWidth >= 992;
   const isTablet = screenWidth >= 640 && screenWidth < 992;
@@ -54,21 +124,64 @@ export default function StudentDashboard() {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      const allSubjects = await loadSubjects();
-      const enrolled = allSubjects.filter(s => s.students && s.students.includes(user.uid));
-      setSubjects(enrolled);
+      // 007 Hardening: Removed insecure mockData fetch
+      // Fetch enrollments for this student
+      const { data: enrollments, error: enrollErr } = await supabase
+        .from('enrollments')
+        .select('subject_id')
+        .eq('student_id', user.id);
+      
+      if (enrollErr) throw enrollErr;
 
-      const allPosts = await loadPosts();
-      const enrolledSubjectIds = enrolled.map(s => s.id);
-      const relevantPosts = allPosts.filter(p => enrolledSubjectIds.includes(p.subjectId));
-      relevantPosts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      setRecentPosts(relevantPosts.slice(0, 5));
+      const enrolledIds = enrollments.map(e => e.subject_id);
 
-      const allSubs = await loadSubmissions();
-      const mySubs = allSubs.filter(s => s.studentId === user.uid);
-      setSubmissionCount(mySubs.length);
+      // Fetch subject details for those enrollments
+      if (enrolledIds.length > 0) {
+        const { data: subjectData, error: subErr } = await supabase
+          .from('subjects')
+          .select('id, name, code, professor_id ( email )')
+          .in('id', enrolledIds);
+          
+        if (subErr) throw subErr;
+        
+        // Map to UI format
+        const formattedSubjects = subjectData.map(s => ({
+          id: s.id,
+          name: s.name,
+          code: s.code,
+          professorEmail: s.professor_id ? s.professor_id.email : 'Unknown'
+        }));
+        setSubjects(formattedSubjects);
+
+        // Fetch recent posts for these subjects
+        const { data: postsData, error: postsErr } = await supabase
+          .from('posts')
+          .select('*')
+          .in('subject_id', enrolledIds)
+          .order('created_at', { ascending: false })
+          .limit(5);
+
+        if (postsErr) throw postsErr;
+        
+        // Map to UI format
+        const formattedPosts = postsData.map(p => ({
+          id: p.id,
+          subjectId: p.subject_id,
+          type: p.type,
+          title: p.title,
+          content: p.content,
+          createdAt: p.created_at
+        }));
+        setRecentPosts(formattedPosts);
+      } else {
+        setSubjects([]);
+        setRecentPosts([]);
+      }
+
+      setSubmissionCount(0); // Submissions table not implemented yet
+
     } catch (e) {
-      console.warn('Failed to fetch dashboard data:', e);
+      console.warn('Failed to fetch dashboard data:', e.message);
     } finally {
       setLoading(false);
     }
@@ -77,56 +190,56 @@ export default function StudentDashboard() {
   const handleJoinSubject = async () => {
     const trimmed = joinCode.trim().toUpperCase();
     if (!trimmed) {
-      Alert.alert('Missing Code', 'Please enter a 6-character class code.');
+      Alert.alert('Missing Code', 'Please enter a class code.');
       return;
     }
 
     setJoining(true);
     try {
-      const allSubjects = await loadSubjects();
-      const subject = allSubjects.find(s => s.code.toUpperCase() === trimmed);
+      // Find subject by code
+      const { data: subject, error: fetchErr } = await supabase
+        .from('subjects')
+        .select('id, name, code')
+        .eq('code', trimmed)
+        .single();
 
-      if (!subject) {
-        Alert.alert('Class Not Found', `No class matches the code "${trimmed}". Please double check with your professor.`);
-        setJoining(false);
+      if (fetchErr || !subject) {
+        Alert.alert('Class Not Found', `No class matches the code "${trimmed}".`);
         return;
       }
 
-      if (subject.bannedStudents && subject.bannedStudents.includes(user.uid)) {
-        Alert.alert('Access Denied', 'You cannot join this class at this time.');
-        setJoining(false);
-        return;
-      }
+      // Check if already enrolled
+      const { data: existingEnrollment } = await supabase
+        .from('enrollments')
+        .select('id')
+        .eq('subject_id', subject.id)
+        .eq('student_id', user.id)
+        .single();
 
-      if (subject.students && subject.students.length >= 50) {
-        Alert.alert('Class Full', 'This class section has reached maximum enrollment.');
-        setJoining(false);
-        return;
-      }
-
-      if (subject.students && subject.students.includes(user.uid)) {
+      if (existingEnrollment) {
         Alert.alert('Already Enrolled', `You are already enrolled in "${subject.name}".`);
         setModalVisible(false);
         setJoinCode('');
-        setJoining(false);
         return;
       }
 
-      if (!subject.students) subject.students = [];
-      subject.students.push(user.uid);
-      await saveSubjects(allSubjects);
+      // Enroll
+      const { error: insertErr } = await supabase
+        .from('enrollments')
+        .insert([{ subject_id: subject.id, student_id: user.id }]);
 
-      await addNotification({
-        title: 'Class Enrolled',
-        body: `You successfully enrolled in ${subject.name} (${subject.code}).`,
-        type: 'class',
-      });
+      if (insertErr) {
+        throw insertErr;
+      }
 
-      const updatedEnrolled = allSubjects.filter(s => s.students && s.students.includes(user.uid));
-      setSubjects(updatedEnrolled);
+
       setModalVisible(false);
       setJoinCode('');
       Alert.alert('Enrollment Successful', `You are now enrolled in "${subject.name}"!`);
+      
+      // Refresh dashboard
+      fetchDashboardData();
+
     } catch (e) {
       Alert.alert('Error', 'Could not join class. Please try again.');
     } finally {
@@ -158,6 +271,9 @@ export default function StudentDashboard() {
         <View style={styles.contentWrapper}>
           {/* ================= WELCOME BANNER ================= */}
           <View style={styles.welcomeBanner}>
+            <Animated.View style={[styles.heroBgCircle1, { transform: [{ translateY: bubble1TranslateY }, { scale: bubble1Scale }] }]} />
+            <Animated.View style={[styles.heroBgCircle2, { transform: [{ translateX: bubble2TranslateX }, { scale: bubble2Scale }] }]} />
+            
             <View style={styles.welcomeTextCol}>
               <View style={styles.studentIdBadgeRow}>
                 <View style={styles.univBadge}>
@@ -215,14 +331,6 @@ export default function StudentDashboard() {
                     <Text style={styles.countBadgeText}>{subjects.length}</Text>
                   </View>
                 </View>
-
-                <TouchableOpacity
-                  style={styles.joinActionBtn}
-                  onPress={() => setModalVisible(true)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.joinActionBtnText}>+ Join with Code</Text>
-                </TouchableOpacity>
               </View>
 
               {loading ? (
@@ -238,15 +346,8 @@ export default function StudentDashboard() {
                   </View>
                   <Text style={styles.emptyTitle}>No Enrolled Classes Yet</Text>
                   <Text style={styles.emptyDescription}>
-                    You haven't joined any classes this academic term. Click the button below and enter the 6-character class code given by your instructor.
+                    You haven't joined any classes this academic term. Use the "Join Class" button at the top to enroll.
                   </Text>
-                  <TouchableOpacity
-                    style={styles.emptyJoinBtn}
-                    onPress={() => setModalVisible(true)}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.emptyJoinBtnText}>+ Join Class with Code</Text>
-                  </TouchableOpacity>
                 </View>
               ) : (
                 /* COURSE CARDS GRID */
@@ -371,37 +472,7 @@ export default function StudentDashboard() {
                 )}
               </View>
 
-              {/* Student Resources Card */}
-              <View style={styles.sideWidgetCard}>
-                <View style={styles.sideWidgetHeader}>
-                  <Text style={styles.sideWidgetTitle}>University Resources</Text>
-                  <Text style={styles.sideWidgetSub}>Quick academic links</Text>
-                </View>
 
-                <View style={styles.resourceLinkList}>
-                  <View style={styles.resourceItem}>
-                    <UIcon name="institution" size={18} color="#059669" style={{ marginRight: 10 }} />
-                    <View style={styles.resourceTextCol}>
-                      <Text style={styles.resourceTitle}>UM Student Portal</Text>
-                      <Text style={styles.resourceSub}>Enlistment & Grades</Text>
-                    </View>
-                  </View>
-                  <View style={styles.resourceItem}>
-                    <UIcon name="book" size={18} color="#059669" style={{ marginRight: 10 }} />
-                    <View style={styles.resourceTextCol}>
-                      <Text style={styles.resourceTitle}>Library Databases</Text>
-                      <Text style={styles.resourceSub}>E-Books & Journals</Text>
-                    </View>
-                  </View>
-                  <View style={styles.resourceItem}>
-                    <UIcon name="chat" size={18} color="#059669" style={{ marginRight: 10 }} />
-                    <View style={styles.resourceTextCol}>
-                      <Text style={styles.resourceTitle}>Campus Support</Text>
-                      <Text style={styles.resourceSub}>Helpdesk & Guidance</Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
             </View>
           </View>
         </View>
@@ -493,122 +564,137 @@ const styles = StyleSheet.create({
     paddingTop: 24,
   },
   welcomeBanner: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    backgroundColor: '#059669', // Deep UM Green
+    borderRadius: 24,
+    padding: 32,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 24,
     shadowColor: '#059669',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.05,
-    shadowRadius: 16,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.35,
+    shadowRadius: 24,
+    elevation: 8,
     flexWrap: 'wrap',
-    gap: 16,
+    gap: 20,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  heroBgCircle1: {
+    position: 'absolute',
+    top: -50,
+    right: -20,
+    width: 250,
+    height: 250,
+    borderRadius: 125,
+    backgroundColor: '#10B981',
+    opacity: 0.3,
+  },
+  heroBgCircle2: {
+    position: 'absolute',
+    bottom: -80,
+    left: -40,
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    backgroundColor: '#047857',
+    opacity: 0.4,
   },
   welcomeTextCol: {
     flex: 1,
     minWidth: 280,
+    zIndex: 1,
   },
   studentIdBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
     gap: 8,
     flexWrap: 'wrap',
   },
   univBadge: {
-    backgroundColor: '#ECFDF5',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#A7F3D0',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   univBadgeText: {
     fontSize: 10,
     fontWeight: '800',
     color: '#059669',
-    letterSpacing: 0.4,
+    letterSpacing: 0.6,
   },
   idBadge: {
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   idBadgeText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#374151',
+    color: '#D1FAE5',
   },
   welcomeHeading: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '900',
-    color: '#111827',
+    color: '#FFFFFF',
     letterSpacing: -0.5,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   welcomeSubtext: {
-    fontSize: 13,
-    color: '#6B7280',
-    lineHeight: 18,
-    marginBottom: 16,
+    fontSize: 14,
+    color: '#D1FAE5',
+    lineHeight: 20,
+    marginBottom: 20,
+    maxWidth: 600,
   },
   statsSummaryRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 32,
     flexWrap: 'wrap',
+    marginTop: 8,
   },
   statPill: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    alignItems: 'center',
-    minWidth: 90,
+    alignItems: 'flex-start',
   },
   statPillNum: {
-    fontSize: 18,
+    fontSize: 28,
     fontWeight: '900',
-    color: '#059669',
+    color: '#FFFFFF',
   },
   statPillLabel: {
     fontSize: 11,
-    color: '#6B7280',
-    fontWeight: '600',
-    marginTop: 1,
+    color: '#A7F3D0',
+    fontWeight: '700',
+    marginTop: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   quickJoinBtn: {
-    backgroundColor: '#059669',
-    borderRadius: 14,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#059669',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 5,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 6,
+    zIndex: 1,
   },
   quickJoinBtnIcon: {
-    color: '#FFFFFF',
+    color: '#059669',
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: '900',
     marginRight: 8,
   },
   quickJoinBtnText: {
-    color: '#FFFFFF',
-    fontSize: 14,
+    color: '#059669',
+    fontSize: 15,
     fontWeight: '800',
     letterSpacing: 0.3,
   },
@@ -686,38 +772,45 @@ const styles = StyleSheet.create({
   },
   emptyStateCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 40,
+    borderRadius: 24,
+    padding: 48,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    textAlign: 'center',
+    borderWidth: 2,
+    borderColor: '#F3F4F6',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    minHeight: 280,
   },
   emptyIconCircle: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: '#ECFDF5',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 4,
   },
   emptyIconEmoji: {
     fontSize: 32,
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '800',
     color: '#111827',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   emptyDescription: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#6B7280',
     textAlign: 'center',
-    maxWidth: 400,
-    lineHeight: 18,
-    marginBottom: 20,
+    maxWidth: 380,
+    lineHeight: 22,
+    marginBottom: 0,
   },
   emptyJoinBtn: {
     backgroundColor: '#059669',
@@ -864,41 +957,52 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.03,
     shadowRadius: 8,
     elevation: 1,
+    borderRadius: 20,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 2,
   },
   sideWidgetHeader: {
-    marginBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-    paddingBottom: 10,
+    marginBottom: 0,
   },
   sideWidgetTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '800',
     color: '#111827',
   },
   sideWidgetSub: {
-    fontSize: 11,
+    fontSize: 13,
     color: '#6B7280',
     marginTop: 2,
   },
   emptySideContent: {
     alignItems: 'center',
-    paddingVertical: 24,
-  },
-  emptySideEmoji: {
-    fontSize: 28,
-    marginBottom: 6,
+    paddingVertical: 36,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#F3F4F6',
+    borderStyle: 'dashed',
+    marginTop: 20,
   },
   emptySideText: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '700',
     color: '#374151',
+    marginTop: 12,
+    marginBottom: 4,
   },
   emptySideSub: {
-    fontSize: 11,
+    fontSize: 13,
     color: '#9CA3AF',
     textAlign: 'center',
-    marginTop: 2,
+    paddingHorizontal: 20,
+    lineHeight: 18,
   },
   recentPostsList: {
     gap: 10,

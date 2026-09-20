@@ -2,7 +2,8 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, SafeAreaView, Modal, TextInput } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../src/context/AuthContext';
-import { loadSubjects, saveSubjects } from '../../src/utils/mockData';
+import { supabase } from '../../src/config/supabase';
+import { ActivityLogger } from '../../src/utils/ActivityLogger';
 
 export default function ProfessorDashboard() {
   const { user, logout } = useAuth();
@@ -22,10 +23,26 @@ export default function ProfessorDashboard() {
   const fetchSubjects = async () => {
     setLoading(true);
     try {
-      const allSubjects = await loadSubjects();
-      setSubjects(allSubjects);
+      // 007 Hardening: Removed insecure mockData fetch
+      const { data, error } = await supabase
+        .from('subjects')
+        .select(`
+          id, name, code,
+          enrollments(count)
+        `)
+        .eq('professor_id', user.id);
+        
+      if (error) throw error;
+      
+      const formattedSubjects = data.map(s => ({
+        id: s.id,
+        name: s.name,
+        code: s.code,
+        studentsCount: s.enrollments ? s.enrollments[0]?.count || 0 : 0
+      }));
+      setSubjects(formattedSubjects);
     } catch (e) {
-      console.warn('Failed to fetch subjects:', e);
+      console.warn('Failed to fetch subjects:', e.message);
     } finally {
       setLoading(false);
     }
@@ -42,26 +59,32 @@ export default function ProfessorDashboard() {
     }
 
     try {
-      const allSubjects = await loadSubjects();
       const code = generateCode();
       const newSub = {
-        id: `sub-${Date.now()}`,
         name: newSubjectName.trim(),
         code,
-        professorId: user.uid,
-        professorEmail: user.email,
-        students: [],
-        bannedStudents: [],
-        createdAt: new Date().toISOString(),
+        professor_id: user.id
       };
-      allSubjects.push(newSub);
-      await saveSubjects(allSubjects);
-      setSubjects(allSubjects);
+      
+      const { data, error } = await supabase
+        .from('subjects')
+        .insert([newSub])
+        .select()
+        .single();
+        
+      if (error) throw error;
+      
+      setSubjects([...subjects, {
+        id: data.id,
+        name: data.name,
+        code: data.code,
+        studentsCount: 0
+      }]);
       setModalVisible(false);
       setNewSubjectName('');
-      Alert.alert('Success', `Created "${newSub.name}" with code: ${code}`);
+      Alert.alert('Success', `Created "${data.name}" with code: ${code}`);
     } catch (e) {
-      Alert.alert('Error', 'Could not create subject.');
+      Alert.alert('Error', 'Could not create subject. ' + e.message);
     }
   };
 
@@ -75,7 +98,7 @@ export default function ProfessorDashboard() {
       </View>
       <View style={styles.cardContent}>
         <Text style={styles.subjectName}>{item.name}</Text>
-        <Text style={styles.subjectMeta}>Code: {item.code}  ·  {item.students.length}/50 students</Text>
+        <Text style={styles.subjectMeta}>Code: {item.code}  ·  {item.studentsCount}/50 students</Text>
       </View>
       <Text style={styles.chevron}>›</Text>
     </TouchableOpacity>

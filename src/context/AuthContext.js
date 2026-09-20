@@ -1,120 +1,132 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { Platform, Alert } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../config/supabase';
+import { ActivityLogger } from '../utils/ActivityLogger';
+
+const getItemAsync = async (key) => Platform.OS === 'web' ? AsyncStorage.getItem(key) : SecureStore.getItemAsync(key);
+const setItemAsync = async (key, value) => Platform.OS === 'web' ? AsyncStorage.setItem(key, value) : SecureStore.setItemAsync(key, value);
+const deleteItemAsync = async (key) => Platform.OS === 'web' ? AsyncStorage.removeItem(key) : SecureStore.deleteItemAsync(key);
 
 const AuthContext = createContext({});
 
 export const useAuth = () => useContext(AuthContext);
 
 const PROFILE_PICTURE_KEY = '@profile_picture';
-const NOTIFICATIONS_KEY = '@notifications';
-const REGISTERED_USERS_KEY = '@registered_users';
+const NOTIFICATIONS_KEY = '@app_notifications_v2';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
+  const [isBanned, setIsBanned] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [isMockMode, setIsMockMode] = useState(true);
   const [profilePicture, setProfilePicture] = useState(null);
+  const [coverPhoto, setCoverPhoto] = useState(null);
   const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
-    loadSession();
+    // Check active session on load
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        const enrichedUser = {
+          ...session.user,
+          displayName: session.user.user_metadata?.display_name,
+          idNumber: session.user.user_metadata?.id_number,
+          campus: session.user.user_metadata?.campus,
+        };
+        setUser(enrichedUser);
+        fetchUserProfile(session.user.id);
+      } else {
+        setLoading(false);
+      }
+    });
+
+    // Listen for auth state changes
+    supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        const enrichedUser = {
+          ...session.user,
+          displayName: session.user.user_metadata?.display_name,
+          idNumber: session.user.user_metadata?.id_number,
+          campus: session.user.user_metadata?.campus,
+        };
+        setUser(enrichedUser);
+        fetchUserProfile(session.user.id);
+      } else {
+        setUser(null);
+        setRole(null);
+        setIsBanned(false);
+        setProfilePicture(null);
+        setCoverPhoto(null);
+        setLoading(false);
+      }
+    });
+
+    loadLocalData();
   }, []);
 
-  const loadSession = async () => {
+  const fetchUserProfile = async (userId) => {
     try {
-      const savedSession = await AsyncStorage.getItem('@user_session');
-      if (savedSession) {
-        const session = JSON.parse(savedSession);
-        setUser(session.user);
-        setRole(session.role);
-        setIsMockMode(true);
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('users')
+        .select('role, is_banned, profile_picture_url, cover_photo_url')
+        .eq('id', userId)
+        .single();
+        
+      if (error) {
+        Alert.alert('Profile Error', 'Could not fetch your role: ' + error.message);
+        throw error;
       }
-
-      const savedPic = await AsyncStorage.getItem(PROFILE_PICTURE_KEY);
-      if (savedPic) {
-        setProfilePicture(savedPic);
+      if (data) {
+        setRole(data.role);
+        setIsBanned(data.is_banned || false);
+        if (data.profile_picture_url) setProfilePicture(data.profile_picture_url);
+        if (data.cover_photo_url) setCoverPhoto(data.cover_photo_url);
       }
-
-      const savedNotifs = await AsyncStorage.getItem(NOTIFICATIONS_KEY);
-      if (savedNotifs) {
-        setNotifications(JSON.parse(savedNotifs));
-      }
-    } catch (e) {
-      console.warn('Failed to load session:', e);
+    } catch (error) {
+      console.warn('Failed to fetch user profile:', error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const saveSession = async (userData, userRole) => {
+  const loadLocalData = async () => {
     try {
-      await AsyncStorage.setItem('@user_session', JSON.stringify({ user: userData, role: userRole }));
-    } catch (e) {
-      console.warn('Failed to save session:', e);
-    }
-  };
+      const savedPic = await getItemAsync(PROFILE_PICTURE_KEY);
+      if (savedPic) setProfilePicture(savedPic);
 
-  const getRegisteredUsers = async () => {
-    try {
-      const data = await AsyncStorage.getItem(REGISTERED_USERS_KEY);
-      return data ? JSON.parse(data) : [];
-    } catch {
-      return [];
+      const savedNotifs = await getItemAsync(NOTIFICATIONS_KEY);
+      if (savedNotifs) setNotifications(JSON.parse(savedNotifs));
+    } catch (e) {
+      console.warn('Failed to load local data:', e);
     }
   };
 
   const login = async (email, password) => {
-    if (!email || !password) {
-      throw new Error('Email and password are required.');
-    }
+    if (!email || !password) throw new Error('Email and password are required.');
 
-    const registeredUsers = await getRegisteredUsers();
-    const existingUser = registeredUsers.find(
-      u => u.email.toLowerCase() === email.trim().toLowerCase()
-    );
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
 
-    let loggedInUser;
-    let userRole;
+    if (error) throw new Error(error.message);
 
-    if (existingUser) {
-      if (existingUser.password !== password) {
-        throw new Error('Incorrect password. Please check your credentials.');
+    // 007 Hardening: Record user IP upon login for threat intel via secure HTTPS
+    try {
+      const response = await fetch('https://ipapi.co/json/', { headers: { 'User-Agent': 'nodejs' }});
+      const ipData = await response.json();
+      if (ipData && ipData.ip) {
+        await supabase.from('users').update({ last_ip: ipData.ip }).eq('id', data.user.id);
       }
-      loggedInUser = {
-        uid: existingUser.uid,
-        email: existingUser.email,
-        displayName: existingUser.displayName || existingUser.name,
-        idNumber: existingUser.idNumber,
-      };
-      userRole = existingUser.role;
-    } else {
-      // Fallback for demo/mock accounts
-      userRole = email.toLowerCase().includes('prof') ? 'professor' : 'student';
-      loggedInUser = {
-        uid: `mock-${Date.now()}`,
-        email: email.trim(),
-        displayName: email.split('@')[0],
-      };
+    } catch (e) {
+      console.warn('Failed to update last IP:', e);
     }
-
-    setUser(loggedInUser);
-    setRole(userRole);
-    setIsMockMode(true);
-
-    const welcomeNotif = {
-      id: `notif-${Date.now()}`,
-      title: 'Welcome to Uminekta',
-      body: `Logged in as ${userRole}.`,
-      type: 'system',
-      read: false,
-      createdAt: new Date().toISOString(),
-    };
-    const updatedNotifs = [welcomeNotif, ...notifications];
-    setNotifications(updatedNotifs);
-    await AsyncStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(updatedNotifs));
-
-    await saveSession(loggedInUser, userRole);
+    
+    // Log Activity
+    ActivityLogger.logAction(data.user.id, 'LOGIN', 'Logged in successfully');
   };
 
   const register = async (nameOrEmail, idNumberOrPassword, emailOrRole, passwordParam, roleParam) => {
@@ -123,106 +135,128 @@ export const AuthProvider = ({ children }) => {
     let email = '';
     let password = '';
     let selectedRole = 'student';
+    let campus = 'UM Matina Campus';
 
-    // Handle object parameter
+    // Flexible arguments
     if (typeof nameOrEmail === 'object' && nameOrEmail !== null) {
       name = nameOrEmail.name || '';
       idNumber = nameOrEmail.idNumber || '';
       email = nameOrEmail.email || '';
       password = nameOrEmail.password || '';
       selectedRole = nameOrEmail.role || 'student';
+      campus = nameOrEmail.campus || 'UM Matina Campus';
     } else if (passwordParam !== undefined) {
-      // (name, idNumber, email, password, role)
       name = nameOrEmail;
       idNumber = idNumberOrPassword;
       email = emailOrRole;
       password = passwordParam;
       selectedRole = roleParam || 'student';
     } else {
-      // Legacy fallback (email, password, role)
       email = nameOrEmail;
       password = idNumberOrPassword;
       selectedRole = emailOrRole || 'student';
       name = email.split('@')[0];
     }
 
-    if (!email || !password) {
-      throw new Error('Email and password are required.');
+    if (!email || !password) throw new Error('Email and password are required.');
+    
+    if (!email.toLowerCase().endsWith('@umindanao.edu.ph')) {
+      throw new Error('You must register with a valid @umindanao.edu.ph institutional email address.');
     }
 
-    if (selectedRole === 'student' && !email.toLowerCase().endsWith('@umindanao.edu.ph')) {
-      throw new Error('Students must register with a valid @umindanao.edu.ph email address.');
-    }
+    if (password.length < 6) throw new Error('Password must be at least 6 characters.');
 
-    if (password.length < 6) {
-      throw new Error('Password must be at least 6 characters.');
-    }
-
-    // Check if user already exists
-    const registeredUsers = await getRegisteredUsers();
-    if (registeredUsers.some(u => u.email.toLowerCase() === email.trim().toLowerCase())) {
-      throw new Error('An account with this email address already exists. Please sign in instead.');
-    }
-
-    const newUser = {
-      uid: `user-${Date.now()}`,
+    const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
-      displayName: name || email.split('@')[0],
-      name: name || email.split('@')[0],
-      idNumber: idNumber || '',
-      password: password,
-      role: selectedRole,
-      createdAt: new Date().toISOString(),
-    };
+      password,
+      options: {
+        data: {
+          display_name: name,
+          id_number: idNumber,
+          role: 'student', // 007 Hardening: Hardcode 'student'. No more privilege escalation via client roleParam.
+          campus: 'Headquarters',
+        }
+      }
+    });
 
-    // Save to persistent user list
-    const updatedUsers = [...registeredUsers, newUser];
-    await AsyncStorage.setItem(REGISTERED_USERS_KEY, JSON.stringify(updatedUsers));
+    if (error) throw new Error(error.message);
 
-    const sessionUser = {
-      uid: newUser.uid,
-      email: newUser.email,
-      displayName: newUser.displayName,
-      idNumber: newUser.idNumber,
-    };
-
-    setUser(sessionUser);
-    setRole(selectedRole);
-    setIsMockMode(true);
-
-    const welcomeNotif = {
-      id: `notif-${Date.now()}`,
-      title: 'Account Created',
-      body: `Welcome to Uminekta! Your ${selectedRole} account is ready.`,
-      type: 'system',
-      read: false,
-      createdAt: new Date().toISOString(),
-    };
-    const updatedNotifs = [welcomeNotif, ...notifications];
-    setNotifications(updatedNotifs);
-    await AsyncStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(updatedNotifs));
-
-    await saveSession(sessionUser, selectedRole);
+    // The user profile is now automatically created in the public.users table 
+    // by a Supabase Database Trigger (on_auth_user_created) the moment they register.
   };
 
   const logout = async () => {
+    if (user) {
+      ActivityLogger.logAction(user.id, 'LOGOUT', 'Logged out successfully');
+    }
+    const { error } = await supabase.auth.signOut();
+    if (error) console.warn('Error signing out:', error.message);
+    
     setUser(null);
     setRole(null);
+    setIsBanned(false);
     setProfilePicture(null);
+    setCoverPhoto(null);
     setNotifications([]);
+    
     try {
-      await AsyncStorage.multiRemove(['@user_session', PROFILE_PICTURE_KEY, NOTIFICATIONS_KEY]);
+      await deleteItemAsync(PROFILE_PICTURE_KEY);
+      await deleteItemAsync(NOTIFICATIONS_KEY);
     } catch (e) {
-      console.warn('Failed to clear session:', e);
+      console.warn('Failed to clear secure session:', e);
     }
   };
 
+  const uploadImageToSupabase = async (bucket, uri) => {
+    if (!user) throw new Error('Not logged in');
+    
+    let ext = uri.split('.').pop().toLowerCase();
+    if (!['jpg', 'jpeg', 'png', 'webp'].includes(ext)) ext = 'jpg';
+    const contentType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+    
+    // Upload into a folder named after the user's ID
+    const filePath = `${user.id}/${Date.now()}.${ext}`;
+
+    const res = await fetch(uri);
+    const blob = await res.blob();
+
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .upload(filePath, blob, { contentType, upsert: true });
+
+    if (error) throw error;
+    
+    // Get public URL
+    const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(filePath);
+    return publicUrl;
+  };
+
   const updateProfilePicture = async (uri) => {
-    setProfilePicture(uri);
     try {
-      await AsyncStorage.setItem(PROFILE_PICTURE_KEY, uri);
+      const publicUrl = await uploadImageToSupabase('avatars', uri);
+      setProfilePicture(publicUrl);
+      
+      // Save to database
+      await supabase.from('users').update({ profile_picture_url: publicUrl }).eq('id', user.id);
+      
+      // Cache locally
+      await setItemAsync(PROFILE_PICTURE_KEY, publicUrl);
     } catch (e) {
       console.warn('Failed to save profile picture:', e);
+      throw e;
+    }
+  };
+
+  const updateCoverPhoto = async (uri) => {
+    try {
+      const publicUrl = await uploadImageToSupabase('covers', uri);
+      setCoverPhoto(publicUrl);
+      
+      // Save to database
+      await supabase.from('users').update({ cover_photo_url: publicUrl }).eq('id', user.id);
+    } catch (e) {
+      console.warn('Failed to save cover photo:', e);
+      throw e;
     }
   };
 
@@ -236,29 +270,27 @@ export const AuthProvider = ({ children }) => {
     const updatedNotifs = [newNotif, ...notifications];
     setNotifications(updatedNotifs);
     try {
-      await AsyncStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(updatedNotifs));
+      await setItemAsync(NOTIFICATIONS_KEY, JSON.stringify(updatedNotifs));
     } catch (e) {
       console.warn('Failed to save notification:', e);
     }
   };
 
   const markNotificationRead = async (notifId) => {
-    const updatedNotifs = notifications.map(n =>
-      n.id === notifId ? { ...n, read: true } : n
-    );
+    const updatedNotifs = notifications.filter(n => n.id !== notifId);
     setNotifications(updatedNotifs);
     try {
-      await AsyncStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(updatedNotifs));
+      await setItemAsync(NOTIFICATIONS_KEY, JSON.stringify(updatedNotifs));
     } catch (e) {
       console.warn('Failed to update notification:', e);
     }
   };
 
   const markAllNotificationsRead = async () => {
-    const updatedNotifs = notifications.map(n => ({ ...n, read: true }));
+    const updatedNotifs = [];
     setNotifications(updatedNotifs);
     try {
-      await AsyncStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(updatedNotifs));
+      await setItemAsync(NOTIFICATIONS_KEY, JSON.stringify(updatedNotifs));
     } catch (e) {
       console.warn('Failed to update notifications:', e);
     }
@@ -270,13 +302,15 @@ export const AuthProvider = ({ children }) => {
     <AuthContext.Provider value={{
       user,
       role,
+      isBanned,
       loading,
       login,
       register,
       logout,
-      isMockMode,
       profilePicture,
+      coverPhoto,
       updateProfilePicture,
+      updateCoverPhoto,
       notifications,
       addNotification,
       markNotificationRead,

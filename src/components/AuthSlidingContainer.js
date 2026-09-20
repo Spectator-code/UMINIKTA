@@ -12,6 +12,7 @@ import {
   Easing,
   ScrollView,
   ImageBackground,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
@@ -27,7 +28,7 @@ export default function AuthSlidingContainer({ initialSignUp = false }) {
   const [showSignInPassword, setShowSignInPassword] = useState(false);
 
   // Sign Up form state
-  const [signUpRole, setSignUpRole] = useState('student'); // 'student' | 'professor'
+  const [signUpCampus, setSignUpCampus] = useState('Matina Campus');
   const [signUpName, setSignUpName] = useState('');
   const [signUpIdNumber, setSignUpIdNumber] = useState('');
   const [signUpEmail, setSignUpEmail] = useState('');
@@ -134,10 +135,10 @@ export default function AuthSlidingContainer({ initialSignUp = false }) {
       Alert.alert('Missing Fields', 'Please fill in all required fields.');
       return;
     }
-    if (signUpRole === 'student' && !signUpEmail.trim().toLowerCase().endsWith('@umindanao.edu.ph')) {
+    if (!signUpEmail.trim().toLowerCase().endsWith('@umindanao.edu.ph')) {
       Alert.alert(
         'Invalid Email',
-        'Students must register with a valid @umindanao.edu.ph institutional email address.'
+        'You must register with a valid @umindanao.edu.ph institutional email address.'
       );
       return;
     }
@@ -153,7 +154,8 @@ export default function AuthSlidingContainer({ initialSignUp = false }) {
         idNumber: signUpIdNumber.trim(),
         email: signUpEmail.trim(),
         password: signUpPassword,
-        role: signUpRole,
+        role: 'student',
+        campus: signUpCampus,
       });
     } catch (e) {
       Alert.alert('Registration Failed', e.message);
@@ -228,7 +230,10 @@ export default function AuthSlidingContainer({ initialSignUp = false }) {
                 showsVerticalScrollIndicator={false}
               >
                 <View style={styles.header}>
-                  <Text style={styles.logoMark}>Uminekta</Text>
+                  <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 12}}>
+                    <Image source={require('../../assets/uminikta-logo.png')} style={{ width: 44, height: 44, borderRadius: 12, marginRight: 10 }} resizeMode="cover" />
+                    <Text style={styles.logoMark}>Uminekta</Text>
+                  </View>
                   <View style={styles.logoDivider} />
                   <Text style={styles.subtitle}>
                     Welcome back. Sign in to continue.
@@ -313,48 +318,48 @@ export default function AuthSlidingContainer({ initialSignUp = false }) {
                 showsVerticalScrollIndicator={false}
               >
                 <View style={styles.header}>
-                  <Text style={styles.logoMark}>Uminekta</Text>
+                  <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 12}}>
+                    <Image source={require('../../assets/uminikta-logo.png')} style={{ width: 44, height: 44, borderRadius: 12, marginRight: 10 }} resizeMode="cover" />
+                    <Text style={styles.logoMark}>Uminekta</Text>
+                  </View>
                   <View style={styles.logoDivider} />
                   <Text style={styles.subtitle}>
                     Create your academic account to get started.
                   </Text>
                 </View>
 
-                {/* Role Selector */}
-                <View style={styles.roleSelectorRow}>
-                  <TouchableOpacity
-                    style={[
-                      styles.roleButton,
-                      signUpRole === 'student' && styles.roleButtonActive,
-                    ]}
-                    onPress={() => setSignUpRole('student')}
-                  >
-                    <Text
-                      style={[
-                        styles.roleButtonText,
-                        signUpRole === 'student' && styles.roleButtonTextActive,
-                      ]}
-                    >
-                      Student
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.roleButton,
-                      signUpRole === 'professor' && styles.roleButtonActive,
-                    ]}
-                    onPress={() => setSignUpRole('professor')}
-                  >
-                    <Text
-                      style={[
-                        styles.roleButtonText,
-                        signUpRole === 'professor' && styles.roleButtonTextActive,
-                      ]}
-                    >
-                      Professor
-                    </Text>
-                  </TouchableOpacity>
+                {/* Campus Selector */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Campus</Text>
+                  <View style={[styles.roleSelectorRow, { marginBottom: 0 }]}>
+                    {['Matina Campus', 'Visayan Campus', 'Arellano Campus'].map((campusOption) => {
+                      const displayNames = {
+                        'Matina Campus': 'Matina',
+                        'Visayan Campus': 'Visayan',
+                        'Arellano Campus': 'Arellano'
+                      };
+                      return (
+                        <TouchableOpacity
+                          key={campusOption}
+                          style={[
+                            styles.roleButton,
+                            signUpCampus === campusOption && styles.roleButtonActive,
+                          ]}
+                          onPress={() => setSignUpCampus(campusOption)}
+                        >
+                          <Text
+                            style={[
+                              styles.roleButtonText,
+                              signUpCampus === campusOption && styles.roleButtonTextActive,
+                              { fontSize: 13 }
+                            ]}
+                          >
+                            {displayNames[campusOption]}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
                 </View>
 
                 {/* Full Name Field */}
@@ -373,13 +378,11 @@ export default function AuthSlidingContainer({ initialSignUp = false }) {
 
                 {/* ID Number Field */}
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>
-                    {signUpRole === 'student' ? 'Student ID Number' : 'Employee ID Number'}
-                  </Text>
+                  <Text style={styles.label}>Student ID Number</Text>
                   <View style={styles.inputWrapper}>
                     <TextInput
                       style={styles.input}
-                      placeholder={signUpRole === 'student' ? 'e.g. 2024-00123' : 'e.g. EMP-2024-089'}
+                      placeholder="e.g. 2024-00123"
                       placeholderTextColor="#9CA3AF"
                       value={signUpIdNumber}
                       onChangeText={setSignUpIdNumber}
@@ -393,11 +396,7 @@ export default function AuthSlidingContainer({ initialSignUp = false }) {
                   <View style={styles.inputWrapper}>
                     <TextInput
                       style={styles.input}
-                      placeholder={
-                        signUpRole === 'student'
-                          ? 'e.g. student@umindanao.edu.ph'
-                          : 'e.g. prof@umindanao.edu.ph'
-                      }
+                      placeholder="e.g. student@umindanao.edu.ph"
                       placeholderTextColor="#9CA3AF"
                       autoCapitalize="none"
                       keyboardType="email-address"
@@ -405,11 +404,9 @@ export default function AuthSlidingContainer({ initialSignUp = false }) {
                       onChangeText={setSignUpEmail}
                     />
                   </View>
-                  {signUpRole === 'student' && (
-                    <Text style={styles.hint}>
-                      Must end with @umindanao.edu.ph
-                    </Text>
-                  )}
+                  <Text style={styles.hint}>
+                    Must end with @umindanao.edu.ph
+                  </Text>
                 </View>
 
                 {/* Password Field */}
@@ -576,7 +573,10 @@ export default function AuthSlidingContainer({ initialSignUp = false }) {
                 /* Mobile Single Sign In Form */
                 <View style={styles.mobileForm}>
                   <View style={styles.header}>
-                    <Text style={styles.logoMark}>Uminekta</Text>
+                    <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 12}}>
+                      <Image source={require('../../assets/uminikta-logo.png')} style={{ width: 44, height: 44, borderRadius: 12, marginRight: 10 }} resizeMode="cover" />
+                      <Text style={styles.logoMark}>Uminekta</Text>
+                    </View>
                     <View style={styles.logoDivider} />
                     <Text style={styles.subtitle}>
                       Welcome back. Sign in to continue.
@@ -648,7 +648,10 @@ export default function AuthSlidingContainer({ initialSignUp = false }) {
                 /* Mobile Single Sign Up Form */
                 <View style={styles.mobileForm}>
                   <View style={styles.header}>
-                    <Text style={styles.logoMark}>Uminekta</Text>
+                    <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 12}}>
+                      <Image source={require('../../assets/uminikta-logo.png')} style={{ width: 44, height: 44, borderRadius: 12, marginRight: 10 }} resizeMode="cover" />
+                      <Text style={styles.logoMark}>Uminekta</Text>
+                    </View>
                     <View style={styles.logoDivider} />
                     <Text style={styles.subtitle}>
                       Create your academic account to get started.

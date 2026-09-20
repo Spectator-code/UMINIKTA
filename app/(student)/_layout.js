@@ -4,7 +4,7 @@ import { View, Text, Dimensions, StyleSheet } from 'react-native';
 import UIcon from '../../src/components/UIcon';
 
 function TabIcon({ label, focused }) {
-  const iconName = label === 'Classes' ? 'book' : 'user';
+  const iconName = label === 'Classes' ? 'book' : label === 'Explore' ? 'search' : 'user';
   const iconColor = focused ? '#059669' : '#6B7280';
   return (
     <View style={styles.tabIconWrapper}>
@@ -63,6 +63,15 @@ export default function StudentLayout() {
           title: 'My Classes',
           tabBarIcon: ({ focused }) => (
             <TabIcon label="Classes" focused={focused} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="explore"
+        options={{
+          title: 'Explore',
+          tabBarIcon: ({ focused }) => (
+            <TabIcon label="Explore" focused={focused} />
           ),
         }}
       />

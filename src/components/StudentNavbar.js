@@ -42,6 +42,7 @@ export default function StudentNavbar({ currentTab = 'classes' }) {
 
   const isDesktop = screenWidth >= 768;
   const isClassesActive = pathname === '/(student)' || pathname === '/' || pathname.includes('subject');
+  const isExploreActive = pathname.includes('explore');
   const isProfileActive = pathname.includes('profile');
 
   const handleLogout = async () => {
@@ -69,14 +70,11 @@ export default function StudentNavbar({ currentTab = 'classes' }) {
           activeOpacity={0.8}
         >
           <View style={styles.brandIconContainer}>
-            <Text style={styles.brandIconText}>U</Text>
+            <Image source={require('../../assets/uminikta-logo.png')} style={styles.brandIconImage} resizeMode="cover" />
           </View>
           <View style={styles.brandTextCol}>
             <View style={styles.logoMarkRow}>
               <Text style={styles.brandName}>Uminekta</Text>
-              <View style={styles.portalBadge}>
-                <Text style={styles.portalBadgeText}>STUDENT</Text>
-              </View>
             </View>
             <Text style={styles.brandTagline}>Academic Portal</Text>
           </View>
@@ -92,6 +90,16 @@ export default function StudentNavbar({ currentTab = 'classes' }) {
               <View style={[styles.navDot, isClassesActive && styles.navDotActive]} />
               <Text style={[styles.navLinkText, isClassesActive && styles.navLinkTextActive]}>
                 My Classes
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.navLink, isExploreActive && styles.navLinkActive]}
+              onPress={() => router.push('/(student)/explore')}
+            >
+              <View style={[styles.navDot, isExploreActive && styles.navDotActive]} />
+              <Text style={[styles.navLinkText, isExploreActive && styles.navLinkTextActive]}>
+                Explore
               </Text>
             </TouchableOpacity>
 
@@ -153,7 +161,7 @@ export default function StudentNavbar({ currentTab = 'classes' }) {
                 onPress={handleLogout}
                 activeOpacity={0.7}
               >
-                <Text style={styles.logoutButtonText}>Sign Out</Text>
+                <Text style={styles.logoutButtonText}>Log Out</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -286,23 +294,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   brandIconContainer: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    backgroundColor: '#059669',
+    width: 44,
+    height: 44,
+    marginRight: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
-    shadowColor: '#059669',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  brandIconText: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: '#FFFFFF',
+  brandIconImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 12,
   },
   brandTextCol: {
     justifyContent: 'center',
@@ -485,17 +492,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   logoutButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#FEE2E2',
-    backgroundColor: '#FEF2F2',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
   },
   logoutButtonText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
-    color: '#EF4444',
+    color: '#4B5563',
   },
   modalOverlay: {
     flex: 1,

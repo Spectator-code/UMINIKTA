@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, SafeAreaVie
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import { useAuth } from '../../src/context/AuthContext';
-import { loadPosts, savePosts } from '../../src/utils/mockData';
+import { queueDatabaseMutation, syncOfflineQueue } from '../../src/utils/offlineQueue';
 
 export default function CreatePost() {
   const { subjectId } = useLocalSearchParams();
@@ -44,28 +44,41 @@ export default function CreatePost() {
       return;
     }
 
+    // 007 Hardening: Input validation to prevent DoS via massive payloads
+    if (title.length > 100) {
+      Alert.alert('Error', 'Title is too long (maximum 100 characters).');
+      return;
+    }
+    
+    if (content.length > 5000) {
+      Alert.alert('Error', 'Content is too long (maximum 5000 characters).');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const allPosts = await loadPosts();
       const newPost = {
-        id: `post-${Date.now()}`,
-        subjectId,
-        professorId: user.uid,
+        subject_id: subjectId,
+        professor_id: user?.id,
         type: postType,
         title: title.trim(),
         content: content.trim(),
-        fileName: file ? file.name : null,
-        fileUri: file ? file.uri : null,
-        createdAt: new Date().toISOString(),
+        file_name: file ? file.name : null,
+        file_uri: file ? file.uri : null, // Future: Upload to Supabase Storage during sync
+        created_at: new Date().toISOString(),
       };
-      allPosts.push(newPost);
-      await savePosts(allPosts);
 
-      Alert.alert('Success', 'Post published!');
-      router.back();
+      const saved = await queueDatabaseMutation('posts', newPost);
+      if (saved) {
+        syncOfflineQueue(); // Fire and forget
+        Alert.alert('Success', 'Post saved! It will sync when online.');
+        router.back();
+      } else {
+        Alert.alert('Error', 'Failed to save post locally.');
+      }
     } catch (e) {
-      Alert.alert('Error', 'Failed to create post.');
+      Alert.alert('Error', 'An unexpected error occurred.');
     } finally {
       setLoading(false);
     }

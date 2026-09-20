@@ -16,14 +16,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../../src/context/AuthContext';
-import {
-  loadPosts,
-  loadComments,
-  saveComments,
-  loadSubmissions,
-  saveSubmissions,
-  loadSubjects,
-} from '../../../src/utils/mockData';
+import { supabase } from '../../../src/config/supabase';
 import * as DocumentPicker from 'expo-document-picker';
 import StudentNavbar from '../../../src/components/StudentNavbar';
 import UIcon from '../../../src/components/UIcon';
@@ -69,103 +62,55 @@ export default function StudentSubjectDetails() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const allSubjects = await loadSubjects();
-      const currentSub = allSubjects.find(s => s.id === id);
-      setSubjectInfo(currentSub || null);
+      // 007 Hardening: Fetch securely from Supabase
+      const { data: subject, error: subErr } = await supabase
+        .from('subjects')
+        .select('id, name, code, professor_id(email)')
+        .eq('id', id)
+        .single();
+        
+      if (subErr) throw subErr;
+      
+      setSubjectInfo({
+        ...subject,
+        professorEmail: subject.professor_id ? subject.professor_id.email : 'Unknown'
+      });
 
-      const allPosts = await loadPosts();
-      const subjectPosts = allPosts.filter(p => p.subjectId === id);
-      subjectPosts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      setPosts(subjectPosts);
+      const { data: postsData, error: postsErr } = await supabase
+        .from('posts')
+        .select('*')
+        .eq('subject_id', id)
+        .order('created_at', { ascending: false });
+        
+      if (postsErr) throw postsErr;
+      
+      const formattedPosts = postsData.map(p => ({
+        id: p.id,
+        subjectId: p.subject_id,
+        type: p.type,
+        title: p.title,
+        content: p.content,
+        fileName: p.file_name,
+        fileUri: p.file_uri,
+        createdAt: p.created_at
+      }));
+      setPosts(formattedPosts);
 
-      const allComments = await loadComments();
-      setComments(allComments);
-
-      const allSubs = await loadSubmissions();
-      const mySubs = allSubs.filter(s => s.subjectId === id && s.studentId === user.uid);
-      setSubmissions(mySubs);
+      setComments([]); // Comments table not implemented in schema yet
+      setSubmissions([]); // Submissions table not implemented in schema yet
     } catch (e) {
-      console.warn("Failed to fetch subject details:", e);
+      console.warn("Failed to fetch subject details:", e.message);
     } finally {
       setLoading(false);
     }
   };
 
   const handleUploadSubmission = async (postId, postTitle) => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: [
-          'application/pdf',
-          'application/msword',
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          'application/vnd.ms-powerpoint',
-          'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-          'application/zip',
-        ],
-        copyToCacheDirectory: true,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        setUploading(true);
-        const file = result.assets[0];
-
-        const allSubmissions = await loadSubmissions();
-        const newSubmission = {
-          id: `sub-${Date.now()}`,
-          postId,
-          studentId: user.uid,
-          studentEmail: user.email,
-          subjectId: id,
-          fileName: file.name,
-          fileUri: file.uri,
-          submittedAt: new Date().toISOString(),
-        };
-
-        const updated = [...allSubmissions.filter(s => !(s.postId === postId && s.studentId === user.uid)), newSubmission];
-        await saveSubmissions(updated);
-
-        const mySubs = updated.filter(s => s.subjectId === id && s.studentId === user.uid);
-        setSubmissions(mySubs);
-
-        await addNotification({
-          title: 'Assignment Submitted',
-          body: `You submitted "${file.name}" for "${postTitle}".`,
-          type: 'submission',
-        });
-
-        Alert.alert('Submission Successful', `"${file.name}" has been uploaded.`);
-      }
-    } catch (err) {
-      Alert.alert('Error', 'Failed to upload file.');
-    } finally {
-      setUploading(false);
-    }
+    Alert.alert('Not Implemented', 'Submissions functionality requires the submissions table in Supabase.');
   };
 
   const handleAddComment = async () => {
-    if (!commentText.trim()) return;
-
-    try {
-      const allComments = await loadComments();
-      const newComment = {
-        id: `comment-${Date.now()}`,
-        postId: activePostId,
-        studentId: user.uid,
-        studentName: user.displayName || 'Student',
-        studentEmail: user.email,
-        text: commentText.trim(),
-        createdAt: new Date().toISOString(),
-      };
-      const updated = [...allComments, newComment];
-      await saveComments(updated);
-      setComments(updated);
-
-      setCommentModalVisible(false);
-      setCommentText('');
-      Alert.alert('Success', 'Comment posted to the class.');
-    } catch (e) {
-      Alert.alert('Error', 'Failed to add comment.');
-    }
+    Alert.alert('Not Implemented', 'Comments functionality requires the comments table in Supabase.');
   };
 
   const openCommentModal = (postId) => {
