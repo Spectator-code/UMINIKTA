@@ -67,32 +67,20 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const fetchUserProfile = async (userId) => {
-    const showAlert = (title, msg) => {
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        window.alert(title + ': ' + msg);
-      } else {
-        Alert.alert(title, msg);
-      }
-    };
-
     try {
       setLoading(true);
-      showAlert('DEBUG 1', 'Fetching profile for userId: ' + userId);
-      
       const { data, error } = await supabase
         .from('users')
         .select('role, is_banned, profile_picture_url, cover_photo_url')
         .eq('id', userId)
         .single();
-      
-      showAlert('DEBUG 2', 'data: ' + JSON.stringify(data) + ' | error: ' + JSON.stringify(error));
         
       if (error) {
+        console.error('[AuthContext] fetchUserProfile error:', error.message, error.code);
         throw error;
       }
       if (data) {
         const normalizedRole = (data.role || 'student').trim().toLowerCase();
-        showAlert('DEBUG 3', 'DB role: "' + data.role + '" => normalized: "' + normalizedRole + '"');
         setRole(normalizedRole);
         setIsBanned(data.is_banned || false);
         if (data.profile_picture_url) {
@@ -103,13 +91,12 @@ export const AuthProvider = ({ children }) => {
       } else {
         const { data: { session } } = await supabase.auth.getSession();
         const sessionRole = session?.user?.user_metadata?.role || 'student';
-        showAlert('DEBUG 4', 'No DB row. Fallback role: "' + sessionRole + '"');
         setRole(sessionRole.trim().toLowerCase());
       }
     } catch (error) {
+      console.error('[AuthContext] fetchUserProfile caught:', error.message);
       const { data: { session } } = await supabase.auth.getSession();
       const sessionRole = session?.user?.user_metadata?.role || 'student';
-      showAlert('DEBUG 5', 'Error: ' + error.message + ' | Fallback role: "' + sessionRole + '"');
       setRole(sessionRole.trim().toLowerCase());
     } finally {
       setLoading(false);

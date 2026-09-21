@@ -6,14 +6,14 @@ export class SecurityWAF {
     try {
       // 007 Security Note: Using plaintext HTTP because it's the only free provider of VPN/Proxy intel.
       // In a production enterprise app, this must be swapped to a paid HTTPS Threat Intel API to prevent MITM bypass.
-      const response = await fetch('http://ip-api.com/json/?fields=status,message,countryCode,proxy,hosting,query');
+      const response = await fetch('https://ipapi.co/json/');
       const data = await response.json();
       
-      if (data.status !== 'success') return { allowed: true }; // Fail open if API fails to avoid breaking app for real users
+      if (data.error) return { allowed: true }; // Fail open if API fails
 
-      const ip = data.query;
-      const country = data.countryCode;
-      const isProxy = data.proxy || data.hosting;
+      const ip = data.ip;
+      const country = data.country_code;
+      const isProxy = false; // ipapi.co free tier doesn't provide proxy detection
 
       // 1. Check Manual Blacklist first
       const { data: blacklisted } = await supabase
