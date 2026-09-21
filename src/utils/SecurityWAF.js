@@ -1,11 +1,10 @@
-import { Alert } from 'react-native';
+// WAF Threat Detection Engine
 import { supabase } from '../config/supabase';
 
 export class SecurityWAF {
   static async checkTraffic() {
     try {
-      // 007 Security Note: Using plaintext HTTP because it's the only free provider of VPN/Proxy intel.
-      // In a production enterprise app, this must be swapped to a paid HTTPS Threat Intel API to prevent MITM bypass.
+      // Geo-IP lookup via HTTPS for threat intelligence
       const response = await fetch('https://ipapi.co/json/');
       const data = await response.json();
       
