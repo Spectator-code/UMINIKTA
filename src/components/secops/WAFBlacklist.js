@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
-import { supabase } from '../../src/config/supabase';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ActivityIndicator, Alert, Platform } from 'react-native';
+import { supabase } from '../../config/supabase';
+import { useConfirm } from '../../context/ConfirmContext';
 import { ShieldAlert, Trash2, Plus } from 'lucide-react-native';
 
 export default function WAFBlacklist() {
+  const { confirm } = useConfirm();
   const [bannedIps, setBannedIps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newIp, setNewIp] = useState('');
@@ -31,12 +33,39 @@ export default function WAFBlacklist() {
   }, []);
 
   const handleAddIp = async () => {
-    if (!newIp.trim()) return;
+    const trimmedIp = newIp.trim();
+    if (!trimmedIp) return;
+
+    // B-06 Remediation: Strict IPv4 and IPv6 format sanitization and validation
+    const ipv4Regex = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+    const ipv6Regex = /^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^::$|^::1$|^([0-9a-fA-F]{1,4}:){1,7}:$|^:(:[0-9a-fA-F]{1,4}){1,7}$|^([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}$/;
+
+    if (!ipv4Regex.test(trimmedIp) && !ipv6Regex.test(trimmedIp)) {
+      const errorMsg = 'Please enter a valid IPv4 (e.g. 192.168.1.1) or IPv6 address.';
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.alert('Invalid IP Address Format:\n\n' + errorMsg);
+      } else {
+        Alert.alert('Invalid IP Pattern', errorMsg);
+      }
+      return;
+    }
+
+    // Check for duplicate in local state
+    if (bannedIps.some(item => item.ip_address === trimmedIp)) {
+      const dupMsg = `IP address ${trimmedIp} is already blacklisted in the WAF perimeter.`;
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.alert(dupMsg);
+      } else {
+        Alert.alert('Duplicate IP Entry', dupMsg);
+      }
+      return;
+    }
+
     setSubmitting(true);
     try {
       const { data, error } = await supabase
         .from('waf_blacklisted_ips')
-        .insert([{ ip_address: newIp.trim(), reason: reason.trim() || 'Manual Ban' }])
+        .insert([{ ip_address: trimmedIp, reason: reason.trim() || 'Manual Ban' }])
         .select()
         .single();
         
@@ -47,23 +76,39 @@ export default function WAFBlacklist() {
       setReason('');
     } catch (e) {
       console.warn('Failed to add IP to blacklist:', e.message);
+      const errMsg = e.message || 'Failed to blacklist IP';
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.alert(errMsg);
+      } else {
+        Alert.alert('Blacklist Error', errMsg);
+      }
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleRemoveIp = async (id) => {
-    try {
-      const { error } = await supabase
-        .from('waf_blacklisted_ips')
-        .delete()
-        .eq('id', id);
-        
-      if (error) throw error;
-      
-      setBannedIps(bannedIps.filter(ip => ip.id !== id));
-    } catch (e) {
-      console.warn('Failed to remove IP:', e.message);
+  const handleRemoveIp = async (id, ip) => {
+    const proceed = await confirm({
+      title: 'Remove IP from WAF Blacklist',
+      message: `Are you sure you want to remove ${ip || 'this IP'} from the permanent WAF blacklist? Inbound traffic from this address will no longer be intercepted.`,
+      confirmText: 'Unblock IP',
+      confirmColor: '#DC2626',
+      icon: 'trash',
+      isDestructive: true,
+    });
+
+    if (proceed) {
+      try {
+        const { error } = await supabase
+          .from('waf_blacklisted_ips')
+          .delete()
+          .eq('id', id);
+          
+        if (error) throw error;
+        setBannedIps(bannedIps.filter((item) => item.id !== id));
+      } catch (e) {
+        console.warn('Failed to remove IP:', e.message);
+      }
     }
   };
 
@@ -79,7 +124,7 @@ export default function WAFBlacklist() {
       <View style={styles.colRight}>
         <TouchableOpacity 
           style={styles.removeBtn}
-          onPress={() => handleRemoveIp(item.id)}
+          onPress={() => handleRemoveIp(item.id, item.ip_address)}
         >
           <Trash2 size={16} color="#94A3B8" />
         </TouchableOpacity>

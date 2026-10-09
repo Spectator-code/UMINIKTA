@@ -1,19 +1,19 @@
 /**
  * ============================================================================
- * MODULE: Student Portal Navigation Bar & Notification Center
- * DIRECTORY: src/components/StudentNavbar.js
- * ROLE/SCOPE: Primary Responsive Header for Student Workspace
+ * MODULE: Faculty Portal Navigation Bar & Notification Center
+ * DIRECTORY: src/components/ProfessorNavbar.js
+ * ROLE/SCOPE: Primary Responsive Header for Faculty Workspace
  * DESCRIPTION:
- *   Top-level navigation header for authenticated students. Provides rapid
- *   access to classes, explore tab, student profile, real-time unread
- *   notifications modal, and secure session termination.
+ *   Top-level navigation header for authenticated professors and faculty members.
+ *   Provides swift navigation between teaching subjects, subject creation triggers,
+ *   unread activity notifications modal, and secure session logout.
  *
  * SECTION INDEX:
  *   1. IMPORTS & DEPENDENCIES
  *   2. COMPONENT INSTANTIATION & STATE HOOKS
  *   3. AUTHENTICATION & LOGOUT HANDLER
  *   4. RENDER: DESKTOP & MOBILE BRAND / NAVIGATION
- *   5. RENDER: NOTIFICATIONS MODAL
+ *   5. RENDER: FACULTY NOTIFICATIONS MODAL
  *   6. COMPONENT STYLESHEET
  * ============================================================================
  */
@@ -38,6 +38,7 @@ import { useRouter, usePathname } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../context/ConfirmContext';
 import UIcon from './UIcon';
+import theme from '../theme';
 import NotificationsDrawer from './NotificationsDrawer';
 import NotificationToast from './NotificationToast';
 
@@ -46,28 +47,18 @@ import NotificationToast from './NotificationToast';
 // ============================================================================
 
 /**
- * Top navigation bar specifically configured for student workspaces.
+ * Top navigation bar specifically configured for faculty workspaces.
  *
  * @param {Object} props
- * @param {string} [props.currentTab='classes'] - Key of currently active navigation tab
- * @returns {React.ReactElement} Responsive student header
+ * @param {Function} [props.onCreateSubjectPress] - Optional callback triggered to open subject creation modal
+ * @returns {React.ReactElement} Responsive faculty header
  */
-export default function StudentNavbar({ currentTab = 'classes' }) {
-  const {
-    user,
-    logout,
-    profilePicture,
-    notifications,
-    unreadCount,
-    markNotificationRead,
-    markAllNotificationsRead,
-  } = useAuth();
+export default function ProfessorNavbar({ onCreateSubjectPress }) {
+  const { user, logout, profilePicture, notifications = [], unreadCount = 0 } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
-  const [screenWidth, setScreenWidth] = useState(
-    Dimensions.get('window').width
-  );
+  const [screenWidth, setScreenWidth] = useState(Dimensions.get('window').width);
   const [notifModalVisible, setNotifModalVisible] = useState(false);
 
   useEffect(() => {
@@ -79,9 +70,7 @@ export default function StudentNavbar({ currentTab = 'classes' }) {
   }, []);
 
   const isDesktop = screenWidth >= 768;
-  const isClassesActive = pathname === '/(student)' || pathname === '/' || pathname.includes('subject');
-  const isExploreActive = pathname.includes('explore');
-  const isProfileActive = pathname.includes('profile');
+  const isDashboardActive = pathname === '/(professor)' || pathname === '/(professor)/' || pathname.includes('subject');
 
   const { confirm } = useConfirm();
 
@@ -90,13 +79,13 @@ export default function StudentNavbar({ currentTab = 'classes' }) {
   // ==========================================================================
 
   /**
-   * Prompts user for logout confirmation and clears active student session.
+   * Prompts faculty user for logout confirmation and terminates active session.
    */
   const handleLogout = async () => {
     const proceed = await confirm({
-      title: 'Confirm Session Logout',
-      message: 'Are you sure you want to log out of your student session? Any unsaved inputs will be discarded.',
-      confirmText: 'Log Out',
+      title: 'Confirm Faculty Sign Out',
+      message: 'Are you sure you want to end your faculty session? Any unsaved grades or notices will be lost.',
+      confirmText: 'Sign Out',
       confirmColor: '#DC2626',
       icon: 'logout',
       isDestructive: true,
@@ -115,7 +104,7 @@ export default function StudentNavbar({ currentTab = 'classes' }) {
   const getInitial = () => {
     if (user?.displayName) return user.displayName.charAt(0).toUpperCase();
     if (user?.email) return user.email.charAt(0).toUpperCase();
-    return 'S';
+    return 'P';
   };
 
   // ==========================================================================
@@ -124,23 +113,27 @@ export default function StudentNavbar({ currentTab = 'classes' }) {
   return (
     <View style={styles.navbarWrapper}>
       <View style={[styles.navbarContainer, !isDesktop && styles.navbarContainerMobile]}>
-        {/* Left: Brand Logo & Portal Badge */}
+        {/* Left: Brand Logo & Faculty Portal Badge */}
         <TouchableOpacity
           style={styles.brandRow}
-          onPress={() => router.push('/(student)')}
+          onPress={() => router.push('/(professor)')}
           activeOpacity={0.8}
         >
           <View style={styles.brandIconContainer}>
-            <Image source={require('../../assets/uminikta-logo.png')} style={styles.brandIconImage} resizeMode="cover" />
+            <Image
+              source={require('../../assets/uminikta-logo.png')}
+              style={styles.brandIconImage}
+              resizeMode="cover"
+            />
           </View>
           <View style={styles.brandTextCol}>
             <View style={styles.logoMarkRow}>
               <Text style={styles.brandName}>UMINIKTA</Text>
-              <View style={styles.portalBadge}>
-                <Text style={styles.portalBadgeText}>STUDENT</Text>
+              <View style={styles.facultyBadge}>
+                <Text style={styles.facultyBadgeText}>FACULTY</Text>
               </View>
             </View>
-            <Text style={styles.brandTagline}>Academic Student Portal</Text>
+            <Text style={styles.brandTagline}>Academic Faculty Portal</Text>
           </View>
         </TouchableOpacity>
 
@@ -148,38 +141,28 @@ export default function StudentNavbar({ currentTab = 'classes' }) {
         {isDesktop && (
           <View style={styles.navLinksRow}>
             <TouchableOpacity
-              style={[styles.navLink, isClassesActive && styles.navLinkActive]}
-              onPress={() => router.push('/(student)')}
+              style={[styles.navLink, isDashboardActive && styles.navLinkActive]}
+              onPress={() => router.push('/(professor)')}
             >
-              <View style={[styles.navDot, isClassesActive && styles.navDotActive]} />
-              <Text style={[styles.navLinkText, isClassesActive && styles.navLinkTextActive]}>
+              <View style={[styles.navDot, isDashboardActive && styles.navDotActive]} />
+              <Text style={[styles.navLinkText, isDashboardActive && styles.navLinkTextActive]}>
                 My Classes
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.navLink, isExploreActive && styles.navLinkActive]}
-              onPress={() => router.push('/(student)/explore')}
-            >
-              <View style={[styles.navDot, isExploreActive && styles.navDotActive]} />
-              <Text style={[styles.navLinkText, isExploreActive && styles.navLinkTextActive]}>
-                Explore
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.navLink, isProfileActive && styles.navLinkActive]}
-              onPress={() => router.push('/(student)/profile')}
-            >
-              <View style={[styles.navDot, isProfileActive && styles.navDotActive]} />
-              <Text style={[styles.navLinkText, isProfileActive && styles.navLinkTextActive]}>
-                Profile
-              </Text>
-            </TouchableOpacity>
+            {onCreateSubjectPress && (
+              <TouchableOpacity
+                style={styles.createClassNavLink}
+                onPress={onCreateSubjectPress}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.createClassNavText}>+ New Subject</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
-        {/* Right: Notifications & User Profile */}
+        {/* Right: Actions & Faculty User Profile */}
         <View style={styles.rightActionsRow}>
           {/* Notifications Bell */}
           <TouchableOpacity
@@ -198,11 +181,7 @@ export default function StudentNavbar({ currentTab = 'classes' }) {
           {/* Desktop User Info & Sign Out */}
           {isDesktop ? (
             <View style={styles.userProfileSection}>
-              <TouchableOpacity
-                style={styles.userInfoRow}
-                onPress={() => router.push('/(student)/profile')}
-                activeOpacity={0.8}
-              >
+              <View style={styles.userInfoRow}>
                 {profilePicture ? (
                   <Image source={{ uri: profilePicture }} style={styles.userAvatarImg} />
                 ) : (
@@ -212,46 +191,39 @@ export default function StudentNavbar({ currentTab = 'classes' }) {
                 )}
                 <View style={styles.userNameCol}>
                   <Text style={styles.userName} numberOfLines={1}>
-                    {user?.displayName || 'Student User'}
+                    {user?.displayName || user?.email?.split('@')[0] || 'Professor'}
                   </Text>
-                  <Text style={styles.userRoleText}>
-                    {user?.idNumber ? `ID: ${user.idNumber}` : 'Student'}
-                  </Text>
+                  <Text style={styles.userRoleText}>Faculty Member</Text>
                 </View>
-              </TouchableOpacity>
+              </View>
 
               <TouchableOpacity
                 style={styles.logoutButton}
                 onPress={handleLogout}
                 activeOpacity={0.7}
               >
-                <Text style={styles.logoutButtonText}>Log Out</Text>
+                <Text style={styles.logoutButtonText}>Sign Out</Text>
               </TouchableOpacity>
             </View>
           ) : (
             <TouchableOpacity
-              onPress={() => router.push('/(student)/profile')}
-              activeOpacity={0.8}
+              style={styles.logoutButtonMobile}
+              onPress={handleLogout}
+              activeOpacity={0.7}
             >
-              {profilePicture ? (
-                <Image source={{ uri: profilePicture }} style={styles.userAvatarImgMobile} />
-              ) : (
-                <View style={styles.userAvatarMobile}>
-                  <Text style={styles.userAvatarTextMobile}>{getInitial()}</Text>
-                </View>
-              )}
+              <Text style={styles.logoutButtonTextMobile}>Sign Out</Text>
             </TouchableOpacity>
           )}
         </View>
       </View>
 
       {/* ==================================================================== */}
-      {/* SECTION 5: RENDER: NOTIFICATIONS DRAWER & IN-APP TOAST               */}
+      {/* SECTION 5: RENDER: FACULTY NOTIFICATIONS DRAWER & IN-APP TOAST        */}
       {/* ==================================================================== */}
       <NotificationsDrawer
         visible={notifModalVisible}
         onClose={() => setNotifModalVisible(false)}
-        role="student"
+        role="professor"
       />
       <NotificationToast />
     </View>
@@ -270,7 +242,7 @@ const styles = StyleSheet.create({
     zIndex: 100,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
+    shadowOpacity: 0.04,
     shadowRadius: 8,
     elevation: 3,
   },
@@ -285,7 +257,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   navbarContainerMobile: {
-    height: 60,
+    height: 62,
     paddingHorizontal: 16,
   },
   brandRow: {
@@ -301,9 +273,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 2,
   },
   brandIconImage: {
     width: '100%',
@@ -323,19 +295,19 @@ const styles = StyleSheet.create({
     color: '#111827',
     letterSpacing: -0.3,
   },
-  portalBadge: {
-    backgroundColor: '#ECFDF5',
+  facultyBadge: {
+    backgroundColor: '#EEF2FF',
     borderWidth: 1,
-    borderColor: '#A7F3D0',
+    borderColor: '#C7D2FE',
     borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 2,
     marginLeft: 8,
   },
-  portalBadgeText: {
+  facultyBadgeText: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#059669',
+    color: '#4F46E5',
     letterSpacing: 0.5,
   },
   brandTagline: {
@@ -349,6 +321,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3F4F6',
     borderRadius: 12,
     padding: 4,
+    gap: 4,
   },
   navLink: {
     flexDirection: 'row',
@@ -373,7 +346,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   navDotActive: {
-    backgroundColor: '#059669',
+    backgroundColor: '#4F46E5',
   },
   navLinkText: {
     fontSize: 14,
@@ -381,7 +354,19 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   navLinkTextActive: {
-    color: '#059669',
+    color: '#4F46E5',
+    fontWeight: '700',
+  },
+  createClassNavLink: {
+    backgroundColor: '#4F46E5',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 8,
+    marginLeft: 4,
+  },
+  createClassNavText: {
+    color: '#FFFFFF',
+    fontSize: 13,
     fontWeight: '700',
   },
   rightActionsRow: {
@@ -399,9 +384,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     position: 'relative',
     marginRight: 14,
-  },
-  bellIcon: {
-    fontSize: 18,
   },
   badge: {
     position: 'absolute',
@@ -427,58 +409,43 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderLeftWidth: 1,
     borderLeftColor: '#E5E7EB',
-    paddingLeft: 14,
+    paddingLeft: 12,
+    flexShrink: 0,
   },
   userInfoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 14,
+    marginRight: 10,
+    flexShrink: 1,
   },
   userAvatar: {
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: '#E0F2FE',
+    backgroundColor: '#EEF2FF',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
+    marginRight: 8,
     borderWidth: 1,
-    borderColor: '#BAE6FD',
+    borderColor: '#C7D2FE',
+    flexShrink: 0,
   },
   userAvatarText: {
     fontSize: 15,
     fontWeight: '800',
-    color: '#0284C7',
+    color: '#4F46E5',
   },
   userAvatarImg: {
     width: 36,
     height: 36,
     borderRadius: 10,
-    marginRight: 10,
-  },
-  userAvatarMobile: {
-    width: 34,
-    height: 34,
-    borderRadius: 9,
-    backgroundColor: '#E0F2FE',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#BAE6FD',
-  },
-  userAvatarTextMobile: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#0284C7',
-  },
-  userAvatarImgMobile: {
-    width: 34,
-    height: 34,
-    borderRadius: 9,
+    marginRight: 8,
+    flexShrink: 0,
   },
   userNameCol: {
     justifyContent: 'center',
-    maxWidth: 130,
+    maxWidth: 110,
+    flexShrink: 1,
   },
   userName: {
     fontSize: 13,
@@ -487,19 +454,33 @@ const styles = StyleSheet.create({
   },
   userRoleText: {
     fontSize: 11,
-    color: '#059669',
+    color: '#4F46E5',
     fontWeight: '600',
   },
   logoutButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
     borderRadius: 20,
     backgroundColor: '#F3F4F6',
+    flexShrink: 0,
   },
   logoutButtonText: {
     fontSize: 13,
     fontWeight: '700',
     color: '#4B5563',
+  },
+  logoutButtonMobile: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  logoutButtonTextMobile: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#DC2626',
   },
   modalOverlay: {
     flex: 1,
@@ -512,7 +493,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
     width: '100%',
-    maxWidth: 480,
+    maxWidth: 460,
     maxHeight: '80%',
     padding: 24,
     shadowColor: '#000000',
@@ -540,7 +521,7 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   notifCountBadge: {
-    backgroundColor: '#ECFDF5',
+    backgroundColor: '#EEF2FF',
     borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -549,19 +530,7 @@ const styles = StyleSheet.create({
   notifCountBadgeText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#059669',
-  },
-  notifHeaderActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  markAllReadBtn: {
-    marginRight: 12,
-  },
-  markAllReadText: {
-    fontSize: 12,
-    color: '#059669',
-    fontWeight: '600',
+    color: '#4F46E5',
   },
   closeBtn: {
     width: 30,
@@ -571,28 +540,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  closeBtnText: {
-    fontSize: 14,
-    color: '#6B7280',
-    fontWeight: '700',
-  },
   notifList: {
-    maxHeight: 400,
+    maxHeight: 360,
   },
   emptyNotifs: {
     alignItems: 'center',
-    paddingVertical: 40,
-    paddingHorizontal: 20,
-  },
-  emptyNotifEmoji: {
-    fontSize: 40,
-    marginBottom: 12,
+    paddingVertical: 36,
+    paddingHorizontal: 16,
   },
   emptyNotifTitle: {
     fontSize: 16,
     fontWeight: '700',
     color: '#111827',
-    marginBottom: 6,
+    marginTop: 12,
+    marginBottom: 4,
   },
   emptyNotifSub: {
     fontSize: 13,
@@ -609,51 +570,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E7EB',
   },
-  notifItemUnread: {
-    backgroundColor: '#F0FDF4',
-    borderColor: '#A7F3D0',
-  },
   notifIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#FFFFFF',
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#EEF2FF',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
-  notifIcon: {
-    fontSize: 16,
-  },
   notifBodyCol: {
     flex: 1,
   },
-  notifItemHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 2,
-  },
   notifItemTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: '#111827',
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#059669',
+    marginBottom: 2,
   },
   notifItemBody: {
     fontSize: 12,
     color: '#4B5563',
-    lineHeight: 16,
-    marginBottom: 4,
-  },
-  notifTime: {
-    fontSize: 10,
-    color: '#9CA3AF',
-    fontWeight: '500',
   },
 });

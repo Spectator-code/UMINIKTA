@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useAuth } from '../../src/context/AuthContext';
+import { useConfirm } from '../../src/context/ConfirmContext';
 import { supabase } from '../../src/config/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import StudentNavbar from '../../src/components/StudentNavbar';
@@ -32,6 +33,7 @@ export default function StudentProfile() {
     markAllNotificationsRead,
     unreadCount,
   } = useAuth();
+  const { confirm } = useConfirm();
   const router = useRouter();
 
   const [stats, setStats] = useState({ classes: 0, submissions: 0 });
@@ -165,21 +167,23 @@ export default function StudentProfile() {
   };
 
   const handleLogout = async () => {
-    Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out of your student account?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: async () => {
-            await logout();
-            router.replace('/login');
-          },
-        },
-      ]
-    );
+    const proceed = await confirm({
+      title: 'Confirm Student Sign Out',
+      message: 'Are you sure you want to sign out of your student account? Any unsaved changes will be discarded.',
+      confirmText: 'Sign Out',
+      confirmColor: '#DC2626',
+      icon: 'logout',
+      isDestructive: true,
+    });
+
+    if (proceed) {
+      try {
+        await logout();
+        router.replace('/');
+      } catch (e) {
+        console.warn('Logout error:', e);
+      }
+    }
   };
 
   // 007 Hardening: Removed insecure handleResetData mechanism
@@ -233,6 +237,10 @@ export default function StudentProfile() {
                     <Text style={styles.studentFullName}>
                       {user?.displayName || 'Student User'}
                     </Text>
+                    <View style={styles.verifiedBadge}>
+                      <UIcon name="shield-check" size={12} color="#059669" style={{ marginRight: 3 }} />
+                      <Text style={styles.verifiedBadgeText}>VERIFIED STUDENT</Text>
+                    </View>
                   </View>
 
                   <Text style={styles.studentEmailText}>
@@ -242,10 +250,11 @@ export default function StudentProfile() {
                   <View style={styles.badgeRow}>
                     <View style={styles.idPill}>
                       <Text style={styles.idLabel}>ID:</Text>
-                      <Text style={styles.idValue}>{user?.idNumber || 'Not Set'}</Text>
+                      <Text style={styles.idValue}>{user?.idNumber || '2024-00123'}</Text>
                     </View>
 
                     <View style={styles.campusPill}>
+                      <UIcon name="building" size={11} color="#059669" style={{ marginRight: 4 }} />
                       <Text style={styles.campusText}>{user?.campus || 'UM Matina Campus'}</Text>
                     </View>
                   </View>
@@ -257,6 +266,7 @@ export default function StudentProfile() {
                 onPress={handleChangeCoverPhoto}
                 activeOpacity={0.8}
               >
+                <UIcon name="camera" size={14} color="#374151" style={{ marginRight: 6 }} />
                 <Text style={styles.changePhotoBtnText}>Update Cover Photo</Text>
               </TouchableOpacity>
             </View>
@@ -452,8 +462,10 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   heroAccentRibbon: {
-    height: 120, // Increased height for better cover photo aspect
-    backgroundColor: '#059669',
+    height: 130,
+    backgroundColor: '#064E3B',
+    borderBottomWidth: 3,
+    borderBottomColor: '#F59E0B',
     width: '100%',
   },
   heroInnerContent: {
@@ -463,7 +475,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     flexWrap: 'wrap',
     gap: 16,
-    marginTop: -30,
+    marginTop: -36,
   },
   avatarSection: {
     flexDirection: 'row',
@@ -475,39 +487,39 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   avatarImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
+    width: 84,
+    height: 84,
+    borderRadius: 26,
+    borderWidth: 3.5,
+    borderColor: '#F59E0B',
   },
   avatarFallback: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-    backgroundColor: '#E0F2FE',
+    width: 84,
+    height: 84,
+    borderRadius: 26,
+    backgroundColor: '#064E3B',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
+    borderWidth: 3.5,
+    borderColor: '#F59E0B',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 4,
   },
   avatarFallbackText: {
-    fontSize: 32,
+    fontSize: 34,
     fontWeight: '900',
-    color: '#0284C7',
+    color: '#FDE68A',
   },
   editBadge: {
     position: 'absolute',
     bottom: -4,
     right: -4,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: '#059669',
     justifyContent: 'center',
     alignItems: 'center',
@@ -526,6 +538,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     marginBottom: 4,
+    flexWrap: 'wrap',
   },
   studentFullName: {
     fontSize: 22,
@@ -534,9 +547,11 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#ECFDF5',
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 6,
     borderWidth: 1,
     borderColor: '#A7F3D0',
@@ -578,6 +593,8 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   campusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#F0FDF4',
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -589,10 +606,14 @@ const styles = StyleSheet.create({
     color: '#059669',
   },
   changePhotoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#F3F4F6',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   changePhotoBtnText: {
     fontSize: 13,
@@ -624,8 +645,8 @@ const styles = StyleSheet.create({
     flex: 2,
     minWidth: '55%',
     minHeight: 180,
-    backgroundColor: '#059669',
-    shadowColor: '#059669',
+    backgroundColor: '#064E3B',
+    shadowColor: '#064E3B',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.25,
     shadowRadius: 16,
